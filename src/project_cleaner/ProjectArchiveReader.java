@@ -8,29 +8,21 @@ import java.io.FileInputStream;
 import java.io.IOException;
 
 public class ProjectArchiveReader implements ProjectReader<ZipEntry> {
-    ZipInputStream inputStream;
-    ZipEntry entry;
+    private final ZipInputStream inputStream;
 
     public ProjectArchiveReader(File zipFile) throws IOException {
         inputStream = new ZipInputStream(
             new BufferedInputStream(
                 new FileInputStream(zipFile)));
-        entry = inputStream.getNextEntry();
-    }
-
-    @Override
-    public boolean hasEntry() {
-        return entry != null;
     }
 
     @Override
     public ZipEntry getNextEntry() throws IOException {
-        inputStream.closeEntry();
-        return entry = inputStream.getNextEntry();
+        return inputStream.getNextEntry();
     }
 
     @Override
-    public int read(byte[] b) throws IOException {
+    public int readEntry(byte[] b) throws IOException {
         return inputStream.read(b);
     }
 

@@ -149,6 +149,7 @@ public class ProjectCleaner {
     }
 
     public static void main(String[] args) {
+        /*
         switch (args.length) {
             case 0:
                 var dialog = new ProjectCleanerDialog();
@@ -169,14 +170,13 @@ public class ProjectCleaner {
                 }
             default:                
         }
-        /*
+        */
         try {
             run(args);
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-        */
     }
 
     private static void run(String[] args) throws IOException {
@@ -210,13 +210,13 @@ public class ProjectCleaner {
         Function<? super I, ? extends O> entryMapper
     ) throws IOException {
         byte[] buffer = new byte[2048];
-        while (reader.hasEntry()) {
-            var entry = reader.getNextEntry();
+        I entry;
+        while ((entry = reader.getNextEntry()) != null) {
             writer.putNextEntry(entryMapper.apply(entry));
 
             int entryLength;
-            while ((entryLength = reader.read(buffer)) > 0) {
-                writer.write(buffer, 0, entryLength);
+            while ((entryLength = reader.readEntry(buffer)) > 0) {
+                writer.writeEntry(buffer, 0, entryLength);
             }
         }
     }

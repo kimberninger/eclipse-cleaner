@@ -35,7 +35,7 @@ public class ProjectDirectoryWriter implements ProjectWriter<Path> {
     }
 
     @Override
-    public void write(byte[] b, int off, int len) throws IOException {
+    public void writeEntry(byte[] b, int off, int len) throws IOException {
         outputStream.write(b, off, len);
     }
 

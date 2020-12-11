@@ -25,23 +25,24 @@ public class ProjectDirectoryReader implements ProjectReader<Path> {
     }
 
     @Override
-    public boolean hasEntry() {
-        return index < entries.size();
-    }
-
-    @Override
     public Path getNextEntry() throws IOException {
         if (inputStream != null) {
             inputStream.close();
         }
-        var entry = entries.get(++index);
+        if (index + 1 >= entries.size()) {
+            return null;
+        }
+
+        index++;
+
+        var entry = entries.get(index);
         inputStream = new BufferedInputStream(
             new FileInputStream(entry.toFile()));
         return entry;
     }
 
     @Override
-    public int read(byte[] b) throws IOException {
+    public int readEntry(byte[] b) throws IOException {
         return inputStream.read(b);
     }
 
