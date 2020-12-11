@@ -187,16 +187,22 @@ public class ProjectCleaner {
             new File(args[3]));
         
         cleaner.cleanProjects(
-            new File("/Users/kimberninger/Downloads/cleanertest/H04_SOLUTION.zip"),
-            new File("/Users/kimberninger/Downloads/cleanertest/extracted"));
+            new File("/Users/kimberninger/Downloads/cleanertest/extracted"),
+            new File("/Users/kimberninger/Downloads/cleanertest/compressed.zip"));
     }
 
     private void cleanProjects(File inputFile, File outputFile) {
         try (
-            var reader = new ProjectArchiveReader(inputFile);
-            var writer = new ProjectDirectoryWriter(outputFile)
+            var reader = new ProjectDirectoryReader(inputFile);
+            var writer = new ProjectArchiveWriter(outputFile)
         ) {
-            cleanProject(reader, writer, entry -> Path.of(entry.getName()));
+            cleanProject(reader, writer, entry -> {
+                var fileName = entry.toString();
+                if (entry.toFile().isDirectory()) {
+                    fileName += "/";
+                }
+                return new ZipEntry(fileName);
+            });
         } catch (IOException e) {
             e.printStackTrace();
         } catch (Exception e) {

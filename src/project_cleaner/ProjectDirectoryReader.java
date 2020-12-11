@@ -36,14 +36,20 @@ public class ProjectDirectoryReader implements ProjectReader<Path> {
         index++;
 
         var entry = entries.get(index);
-        inputStream = new BufferedInputStream(
-            new FileInputStream(entry.toFile()));
+
+        if (entry.toFile().isFile()) {
+            inputStream = new BufferedInputStream(
+                new FileInputStream(entry.toFile()));
+        } else {
+            inputStream = null;
+        }
+
         return entry;
     }
 
     @Override
     public int readEntry(byte[] b) throws IOException {
-        return inputStream.read(b);
+        return inputStream != null ? inputStream.read(b) : 0;
     }
 
     @Override
