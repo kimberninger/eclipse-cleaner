@@ -33,6 +33,7 @@ public class SubmissionsExtractor {
 	private File outputDir;
 	private PrintStream log = System.out;
 	private PrintStream err = System.err;
+	private File solutionArchive;
 
 	public SubmissionsExtractor(File submissionFile, File outputDir) {
 		this.submissionFile = submissionFile;
@@ -45,8 +46,14 @@ public class SubmissionsExtractor {
 		this.err = err;
 	}
 
+	public SubmissionsExtractor(File submissionFile, File outputDir, File solutionArchive, PrintStream log,
+			PrintStream err) {
+		this(submissionFile, outputDir, log, err);
+		this.solutionArchive = solutionArchive;
+	}
+
 	public void extract() {
-		log.println("Extracting Projects...");
+		log.println("Vorbereitung...");
 		if (!EnsureEmpty(outputDir)) {
 			err.println("Target directory not empty, aborting");
 			return;
@@ -58,14 +65,31 @@ public class SubmissionsExtractor {
 		File faultyDir = tempDirs.get(2);
 		// Extract the main Zip File
 		extractFolder(submissionFile.getAbsolutePath(), tempAllSubsFolder.getAbsolutePath());
+		File solutionFolder = null;
+		if (solutionArchive != null) {
+			// Extract the Solution Project
+			extractFolder(solutionArchive.getAbsolutePath(), outputDir.getAbsolutePath());
+			if (!Stream.of(outputDir.listFiles()).anyMatch(x -> x.getName().endsWith("SOLUTION"))) {
+				System.err.println("Faulty solution");
+				return;
+			}
+			solutionFolder = Stream.of(outputDir.listFiles()).filter(x -> x.getName().endsWith("SOLUTION")).findFirst()
+					.get();
+		}
 		// Extract The individual submissions
+		int fileCount = 0;
+		int successfullCount = 0;
+		log.println("Extracting Projects...");
 		for (File submission : tempAllSubsFolder.listFiles()) {
+			fileCount++;
 			if (!submission.isDirectory() || submission.listFiles().length != 1) {
 				err.println("Cannot Extract submission " + submission.getName()
 						+ " (maybe you didn't download compressed submissions?)");
 				moveFolderContent(submission, faultyDir);
 				continue;
 			}
+			String submittorName = submission.getName().split("_")[0];
+			log.println("Extracting Submission from " + submittorName);
 			// Extract current Submission to tempCurrentSubFolder
 			File submissionZip = submission.listFiles()[0];
 			if (!submissionZip.getName().endsWith(".zip")) {
@@ -86,7 +110,7 @@ public class SubmissionsExtractor {
 			extractFolder(submissionZip.getAbsolutePath(), tempCurrentSubFolder.getAbsolutePath());
 			// Naming convention check 2
 			if (tempCurrentSubFolder.listFiles().length == 0) {
-				err.println("Abgabeverzeichnis leer: " + submission.getName());
+				err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
 				moveFolderContent(submission, faultyDir);
 				continue;
 			}
@@ -99,11 +123,25 @@ public class SubmissionsExtractor {
 			 * continue; }
 			 */
 			// Final Naming Convention Check and compatibility check
-			System.out.println(Arrays.stream(submissionProjectFolder.listFiles()).map(x -> x.getName()).collect(Collectors.joining(", ")));
+			boolean hadProjectFile = true;
 			if (!Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals(".project"))) {
-				err.println("keine .project Datei: " + submission.getName());
-				moveFolderContent(submission, faultyDir);
-				continue;
+				err.println("keine .project Datei bei " + submittorName);
+				try {
+					// Copy .project from Solution
+					if (solutionArchive != null) {
+						err.println("Kopiere .project Datei von Musterlösung");
+						Files.copy(Paths.get(solutionFolder.getAbsolutePath(), ".project"),
+								Paths.get(submissionProjectFolder.getAbsolutePath(), ".project"),
+								StandardCopyOption.REPLACE_EXISTING);
+					} else {
+						moveFolderContent(submission, faultyDir);
+						continue;
+					}
+				} catch (IOException e) {
+					err.println("Error during .project copy: " + e.getMessage());
+					continue;
+				}
+				hadProjectFile = false;
 			}
 			File projectFile = Paths.get(submissionProjectFolder.getAbsolutePath(), ".project").toFile();
 			DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
@@ -115,14 +153,18 @@ public class SubmissionsExtractor {
 				var projectName = document.getElementsByTagName("name").item(0);
 				if (!projectName.getTextContent()
 						.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
-					err.println("Namenskonvention verletzt in " + submission.getName() + ": "
-							+ projectName.getTextContent());
+					if (hadProjectFile) {
+						err.println(
+								"Namenskonvention verletzt bei " + submittorName + ": " + projectName.getTextContent());
+					} else {
+						err.println("passe Namenskonvention für " + submittorName + " an...");
+					}
 					// Get correct project name
-					String submittorName = submission.getName().split("_")[0];
 					String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
 							.replace("ü", "ue").replace("ß", "ss");
-					err.println("Projekt nach " + "H04_" + newProjectName + " umbenannt");
-					projectName.setTextContent("H04_" + newProjectName);
+					String hausuebungsprefix = solutionFolder == null ? "HXX_" : solutionFolder.getName().split("_")[0] + "_";
+					err.println("Projekt nach " + hausuebungsprefix + newProjectName + " umbenannt");
+					projectName.setTextContent(hausuebungsprefix + newProjectName);
 					// Overwrite .project File
 					// 4- Save the result to a new XML doc
 					Transformer xformer = TransformerFactory.newInstance().newTransformer();
@@ -147,12 +189,14 @@ public class SubmissionsExtractor {
 				}
 			}
 			moveFolderContent(tempCurrentSubFolder, outputDir);
-
+			successfullCount++;
 			continue;
 		}
 		log.println("Cleanup...");
 		removeFolders(tempCurrentSubFolder, tempAllSubsFolder);
 		log.println("Done :)");
+		log.println(String.format("Converted %s file(s):\n%s sucessfull and %s faulty", fileCount, successfullCount,
+				fileCount - successfullCount));
 	}
 
 	private void extractFolder(String zipFile, String extractFolder) {
