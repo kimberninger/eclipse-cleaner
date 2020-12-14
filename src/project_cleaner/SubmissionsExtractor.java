@@ -34,6 +34,7 @@ public class SubmissionsExtractor {
 	private PrintStream log = System.out;
 	private PrintStream err = System.err;
 	private File solutionArchive;
+	private File fileList;
 
 	public SubmissionsExtractor(File submissionFile, File outputDir) {
 		this.submissionFile = submissionFile;
@@ -52,6 +53,12 @@ public class SubmissionsExtractor {
 		this.solutionArchive = solutionArchive;
 	}
 
+	public SubmissionsExtractor(File submissionFile, File outputDir, File solutionArchive, File fileList,
+			PrintStream log, PrintStream err) {
+		this(submissionFile, outputDir, solutionArchive, log, err);
+		this.fileList = fileList;
+	}
+
 	public void extract() {
 		log.println("Vorbereitung...");
 		if (!EnsureEmpty(outputDir)) {
@@ -66,6 +73,7 @@ public class SubmissionsExtractor {
 		// Extract the main Zip File
 		extractFolder(submissionFile.getAbsolutePath(), tempAllSubsFolder.getAbsolutePath());
 		File solutionFolder = null;
+		ArrayList<Path> filesToEvaluate = null;
 		if (solutionArchive != null) {
 			// Extract the Solution Project
 			extractFolder(solutionArchive.getAbsolutePath(), outputDir.getAbsolutePath());
@@ -75,6 +83,16 @@ public class SubmissionsExtractor {
 			}
 			solutionFolder = Stream.of(outputDir.listFiles()).filter(x -> x.getName().endsWith("SOLUTION")).findFirst()
 					.get();
+			if (fileList != null) {
+				try {
+					String solPath = solutionFolder.getAbsolutePath();
+					filesToEvaluate = (ArrayList<Path>) Files.lines(fileList.toPath()).filter(x -> !x.startsWith("#"))
+							.map(x -> Paths.get(solPath, x).toAbsolutePath()).collect(Collectors.toList());
+				} catch (Exception e) {
+					err.print(e.getMessage());
+					fileList = null;
+				}
+			}
 		}
 		// Extract The individual submissions
 		int fileCount = 0;
@@ -162,7 +180,8 @@ public class SubmissionsExtractor {
 					// Get correct project name
 					String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
 							.replace("ü", "ue").replace("ß", "ss");
-					String hausuebungsprefix = solutionFolder == null ? "HXX_" : solutionFolder.getName().split("_")[0] + "_";
+					String hausuebungsprefix = solutionFolder == null ? "HXX_"
+							: solutionFolder.getName().split("_")[0] + "_";
 					err.println("Projekt nach " + hausuebungsprefix + newProjectName + " umbenannt");
 					projectName.setTextContent(hausuebungsprefix + newProjectName);
 					// Overwrite .project File
@@ -170,6 +189,9 @@ public class SubmissionsExtractor {
 					Transformer xformer = TransformerFactory.newInstance().newTransformer();
 					xformer.transform(new DOMSource(document), new StreamResult(projectFile));
 
+				}
+				if (fileList != null && filesToEvaluate != null) {
+					copyFolderContent(solutionFolder, submissionProjectFolder, filesToEvaluate);
 				}
 			} catch (Exception e) {
 				err.println(e.getMessage());
@@ -290,6 +312,33 @@ public class SubmissionsExtractor {
 			clearFolder(f);
 			// The directory is now empty so we delete it
 			f.delete();
+		}
+	}
+
+	private void copyFolderContent(File parentDir, File targetDir, ArrayList<Path> Exclude) {
+		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
+			throw new IllegalArgumentException("parentDir must be a directory");
+		}
+		for (File file : parentDir.listFiles()) {
+			if (Exclude.contains(file.toPath().toAbsolutePath())) {
+				if (!Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile().exists()) {
+					err.println("File " + file.getName() + " missing...");
+				}
+				continue;
+			}
+			if (file.isDirectory()) {
+				copyFolderContent(file, ensureDirectories(targetDir, file.getName()).get(0), Exclude);
+			} else {
+				try {
+					Path target = Paths.get(targetDir.getAbsolutePath(), file.getName());
+					if (!target.toFile().exists()) {
+						System.out.println("Copying file " + file.getName());
+						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
+					}
+				} catch (IOException e) {
+					err.println(e.getMessage());
+				}
+			}
 		}
 	}
 

@@ -148,7 +148,8 @@ public class ProjectCleanerDialog extends JFrame {
             			submissionsFileField.getText().equals("") ? null : new File(submissionsFileField.getText()),  
             			outputDirectoryField.getText().equals("") ? null : new File(outputDirectoryField.getText()), 
             			solutionFileField.getText().equals("") ? null : new File(solutionFileField.getText()), 
-            					getOut(), getErr());
+            			fileListFileField.getText().equals("") ? null : new File(fileListFileField.getText()), 
+            			getOut(), getErr());
             	extractor.extract();
             } catch (Exception ex) {
                 System.err.println(ex.getMessage());
