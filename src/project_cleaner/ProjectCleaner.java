@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
@@ -120,14 +121,15 @@ public class ProjectCleaner {
 
     private void cleanSubmissionArchive() {
         System.out.println("Zip!");
-        /*var buffer = new byte[2048];
+        var buffer = new byte[2048];
+        /*
         try (
             var inputStream = new ZipInputStream(
                 new BufferedInputStream(
                     new FileInputStream(solutionFile)));
             var outputStream = new ZipOutputStream(
                 new BufferedOutputStream(
-                    new FileOutputStream(cleanedFile)))) {
+                    new FileOutputStream(outputDirectory)))) {
             ZipEntry inputEntry;
 
             while ((inputEntry = inputStream.getNextEntry()) != null) {
@@ -146,10 +148,11 @@ public class ProjectCleaner {
             // TODO Auto-generated catch block
             e1.printStackTrace();
         }*/
+        
     }
 
     public static void main(String[] args) {
-        /*
+        
         switch (args.length) {
             case 0:
                 var dialog = new ProjectCleanerDialog();
@@ -170,13 +173,13 @@ public class ProjectCleaner {
                 }
             default:                
         }
-        */
+        /*
         try {
             run(args);
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
-        }
+        }*/
     }
 
     private static void run(String[] args) throws IOException {
@@ -187,8 +190,8 @@ public class ProjectCleaner {
             new File(args[3]));
         
         cleaner.cleanProjects(
-            new File("/Users/kimberninger/Downloads/cleanertest/extracted"),
-            new File("/Users/kimberninger/Downloads/cleanertest/compressed.zip"));
+            new File("/home/ruben/Downloads/HausuebungenFOP/h03/target/H03_Hushan_Malak/"),
+            new File("/home/ruben/Downloads/HausuebungenFOP/h03/target/atry.zip"));
     }
 
     private void cleanProjects(File inputFile, File outputFile) {
