@@ -12,10 +12,21 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import org.w3c.dom.*;
+import org.xml.sax.SAXException;
 
 import javax.swing.JOptionPane;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 public class SubmissionsExtractor {
 	private File submissionFile;
@@ -63,13 +74,14 @@ public class SubmissionsExtractor {
 				moveFolderContent(submission, faultyDir);
 				continue;
 			}
-			// Naming convention check 1
-			if (submissionZip.getName().contains("NACHNAME_VORNAME")
-					|| !submissionZip.getName().matches("H[0-9]+_[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.zip")) {
-				err.println("Namenskonvention verletzt: " + submission.getName());
-				moveFolderContent(submission, faultyDir);
-				continue;
-			}
+			// Naming convention check 1 (now unnecessarty)
+			/*
+			 * if(!submissionZip.getName().matches(
+			 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.zip")) {
+			 * log.
+			 * println("Namenskonvention leicht verletzt, KEIN PUNKTABZUG(abgabearchiv): " +
+			 * submission.getName()); moveFolderContent(submission, faultyDir); continue; }
+			 */
 			clearFolder(tempCurrentSubFolder);
 			extractFolder(submissionZip.getAbsolutePath(), tempCurrentSubFolder.getAbsolutePath());
 			// Naming convention check 2
@@ -78,15 +90,64 @@ public class SubmissionsExtractor {
 				moveFolderContent(submission, faultyDir);
 				continue;
 			}
-			var submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
-			if (submissionProjectFolder.getName().contains("NACHNAME_VORNAME")
-					|| !submissionProjectFolder.getName().matches("H[0-9]+_[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
-				err.println("Namenskonvention verletzt in " + submission.getName() + ": "
-						+ submissionProjectFolder.getName());
+			File submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
+			/*
+			 * Unnecessary if (!submissionProjectFolder.getName().matches(
+			 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
+			 * err.println("Namenskonvention verletzt in " + submission.getName() + ": " +
+			 * submissionProjectFolder.getName()); moveFolderContent(submission, faultyDir);
+			 * continue; }
+			 */
+			// Final Naming Convention Check and compatibility check
+			System.out.println(Arrays.stream(submissionProjectFolder.listFiles()).map(x -> x.getName()).collect(Collectors.joining(", ")));
+			if (!Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals(".project"))) {
+				err.println("keine .project Datei: " + submission.getName());
 				moveFolderContent(submission, faultyDir);
 				continue;
 			}
+			File projectFile = Paths.get(submissionProjectFolder.getAbsolutePath(), ".project").toFile();
+			DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder documentBuilder;
+			Document document;
+			try {
+				documentBuilder = documentBuilderFactory.newDocumentBuilder();
+				document = documentBuilder.parse(projectFile);
+				var projectName = document.getElementsByTagName("name").item(0);
+				if (!projectName.getTextContent()
+						.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
+					err.println("Namenskonvention verletzt in " + submission.getName() + ": "
+							+ projectName.getTextContent());
+					// Get correct project name
+					String submittorName = submission.getName().split("_")[0];
+					String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
+							.replace("ü", "ue").replace("ß", "ss");
+					err.println("Projekt nach " + "H04_" + newProjectName + " umbenannt");
+					projectName.setTextContent("H04_" + newProjectName);
+					// Overwrite .project File
+					// 4- Save the result to a new XML doc
+					Transformer xformer = TransformerFactory.newInstance().newTransformer();
+					xformer.transform(new DOMSource(document), new StreamResult(projectFile));
+
+				}
+			} catch (Exception e) {
+				err.println(e.getMessage());
+			}
+			// Project is ready to import, make sure foldername doesn't exist already
+			if (Stream.of(outputDir.listFiles())
+					.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
+				err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
+						+ submissionProjectFolder.getName() + "(1)");
+				File newProjectFolder = Paths
+						.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(1)")
+						.toFile();
+				if (!submissionProjectFolder.renameTo(newProjectFolder)) {
+					err.println("Could not rename, moving to faulty");
+					moveFolderContent(tempCurrentSubFolder, faultyDir);
+					continue;
+				}
+			}
 			moveFolderContent(tempCurrentSubFolder, outputDir);
+
 			continue;
 		}
 		log.println("Cleanup...");
