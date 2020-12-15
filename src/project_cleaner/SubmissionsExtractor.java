@@ -2,9 +2,11 @@ package project_cleaner;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -19,12 +21,9 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.w3c.dom.*;
-import org.xml.sax.SAXException;
-
 import javax.swing.JOptionPane;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
@@ -37,6 +36,10 @@ public class SubmissionsExtractor {
 	private PrintStream err = System.err;
 	private File solutionArchive;
 	private File fileList;
+
+	private enum FileReadMode {
+		ASSERT_EXISTS, OVERWRITE_ALWAYS, COPY_IF_NOT_EXISTS, ASSERT_NOT_EXISTS, IGNORE
+	}
 
 	public SubmissionsExtractor(File submissionFile, File outputDir) {
 		this.submissionFile = submissionFile;
@@ -75,7 +78,11 @@ public class SubmissionsExtractor {
 		// Extract the main Zip File
 		extractFolder(submissionFile.getAbsolutePath(), tempAllSubsFolder.getAbsolutePath());
 		File solutionFolder = null;
-		ArrayList<Path> filesToEvaluate = null;
+		ArrayList<Path> filesToAssertExist = new ArrayList<>();
+		ArrayList<Path> filesToOverwrite = new ArrayList<>();
+		ArrayList<Path> filesToCopyIfNotExist = new ArrayList<>();
+		ArrayList<Path> filesToAssertNotExist = new ArrayList<>();
+		ArrayList<Path> filesToIgnore = new ArrayList<>();
 		if (solutionArchive != null) {
 			// Extract the Solution Project
 			extractFolder(solutionArchive.getAbsolutePath(), outputDir.getAbsolutePath());
@@ -88,8 +95,74 @@ public class SubmissionsExtractor {
 			if (fileList != null) {
 				try {
 					String solPath = solutionFolder.getAbsolutePath();
-					filesToEvaluate = (ArrayList<Path>) Files.lines(fileList.toPath()).filter(x -> !x.startsWith("#"))
-							.map(x -> Paths.get(solPath, x).toAbsolutePath()).collect(Collectors.toList());
+					BufferedReader fileListReader = new BufferedReader(new FileReader(fileList));
+					String currentLine;
+					int lineNumber = 0;
+					FileReadMode currentMode = FileReadMode.ASSERT_EXISTS;
+					// Read File Line By Line
+					while ((currentLine = fileListReader.readLine()) != null) {
+						lineNumber++;
+						// Comments
+						if (currentLine.startsWith("#"))
+							continue;
+						// Mode switcher
+						if (currentLine.startsWith("[")) {
+							if (!currentLine.endsWith("]")) {
+								System.err.println("Faulty FileList Line:" + lineNumber);
+							}
+							switch (currentLine.toLowerCase()) { // Case insensitive matching
+							case "[assert_exists]":
+								currentMode = FileReadMode.ASSERT_EXISTS;
+								continue;
+							case "[overwrite_always]":
+								currentMode = FileReadMode.OVERWRITE_ALWAYS;
+								continue;
+							case "[copy_if_not_exists]":
+								currentMode = FileReadMode.COPY_IF_NOT_EXISTS;
+								continue;
+							case "[assert_not_exists]":
+								currentMode = FileReadMode.ASSERT_NOT_EXISTS;
+								continue;
+							case "[ignore]":
+								currentMode = FileReadMode.IGNORE;
+								continue;
+							default:
+								System.err.println("Unknown File Read Mode: " + currentLine);
+								continue;
+							}
+						}
+						// Reading
+						switch (currentMode) {
+						case ASSERT_EXISTS:
+							filesToAssertExist.add(Paths.get(solPath, currentLine));
+							break;
+						case ASSERT_NOT_EXISTS:
+							filesToAssertNotExist.add(Paths.get(solPath, currentLine));
+							break;
+						case OVERWRITE_ALWAYS:
+							filesToOverwrite.add(Paths.get(solPath, currentLine));
+							break;
+						case COPY_IF_NOT_EXISTS:
+							filesToCopyIfNotExist.add(Paths.get(solPath, currentLine));
+							break;
+						case IGNORE:
+							filesToIgnore.add(Paths.get(solPath, currentLine));
+							break;
+						default:
+							break;
+						}
+					}
+					System.out.println("Files to Assert exist: " + filesToAssertExist.toString());
+					System.out.println("Files to Assert not exist: " + filesToAssertNotExist.toString());
+					System.out.println("Files to overwrite: " + filesToOverwrite.toString());
+					System.out.println("Files to ignore: " + filesToIgnore.toString());
+
+					// Close the input stream
+					fileListReader.close();
+					// filesToEvaluate = (ArrayList<Path>) Files.lines(fileList.toPath()).filter(x
+					// -> !x.startsWith("#"))
+					// .map(x -> Paths.get(solPath,
+					// x).toAbsolutePath()).collect(Collectors.toList());
 				} catch (Exception e) {
 					err.print(e.getMessage());
 					fileList = null;
@@ -192,8 +265,9 @@ public class SubmissionsExtractor {
 					xformer.transform(new DOMSource(document), new StreamResult(projectFile));
 
 				}
-				if (fileList != null && filesToEvaluate != null) {
-					copyFolderContent(solutionFolder, submissionProjectFolder, filesToEvaluate);
+				if (fileList != null && filesToAssertExist != null) {
+					mergeProjectContent(solutionFolder, submissionProjectFolder, filesToAssertExist,
+							filesToAssertNotExist, filesToOverwrite, filesToCopyIfNotExist, filesToIgnore);
 				}
 			} catch (Exception e) {
 				err.println(e.getMessage());
@@ -317,50 +391,91 @@ public class SubmissionsExtractor {
 		}
 	}
 
-	private void copyFolderContent(File parentDir, File targetDir, ArrayList<Path> Exclude) {
-		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
+	private void mergeProjectContent(File solutionDir, File targetDir, ArrayList<Path> assertExist,
+			ArrayList<Path> assertNotExist, ArrayList<Path> overwrite, ArrayList<Path> copyIfNotExists,
+			ArrayList<Path> ignore) {
+		if (!solutionDir.isDirectory() || !targetDir.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
 		}
-		for (File file : parentDir.listFiles()) {
-			if (Exclude.contains(file.toPath().toAbsolutePath())) {
-				if (!Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile().exists()) {
-					err.println("File " + file.getName() + " missing...");
-				}
+		for (File file : solutionDir.listFiles()) {
+			Path filePath = file.toPath().toAbsolutePath();
+			// ignore mode
+			if (ignore.contains(filePath)) {
 				continue;
 			}
+			// assert exist mode
+			if (assertExist.contains(filePath)) {
+				if (!Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile().exists()) {
+					err.println("File " + file.getName() + " missing...");
+					continue;
+				}
+			}
 			if (file.isDirectory()) {
-				copyFolderContent(file, ensureDirectories(targetDir, file.getName()).get(0), Exclude);
+				// Copy_if_not_exists and overwrite_always mode for directories
+				if (overwrite.contains(file.toPath().toAbsolutePath())) {
+					copyFolderContent(file, Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile());
+					continue;
+				}
+				mergeProjectContent(file, ensureDirectories(targetDir, file.getName()).get(0), assertExist,
+						assertNotExist, overwrite, copyIfNotExists, ignore);
 			} else {
 				try {
 					Path target = Paths.get(targetDir.getAbsolutePath(), file.getName());
+					// Copy_if_not_exists and overwrite_always mode for files
 					if (!target.toFile().exists()) {
-						//System.out.println("Copying file " + file.getName());
+						// System.out.println("Copying file " + file.getName());
 						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
-					} /*else if(!filesEqual(file, target.toFile())) {
-						System.err.println("File " + file.getName() + "was Modified");
-						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
-					}*/
+					} else if(overwrite.contains(filePath)) {
+						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()), StandardCopyOption.REPLACE_EXISTING);
+					}
+					/*
+						 * else if(!filesEqual(file, target.toFile())) { System.err.println("File " +
+						 * file.getName() + "was Modified"); Files.copy(file.toPath(),
+						 * Paths.get(targetDir.getAbsolutePath(), file.getName())); }
+						 */
 				} catch (IOException e) {
 					err.println(e.getMessage());
 				}
 			}
 		}
 	}
-	
-	public static boolean filesEqual(File f1, File f2) throws FileNotFoundException {
-		Scanner input1 = new Scanner(f1);//read first file
-		Scanner input2 = new Scanner(f2);//read second file
 
-		while(input1.hasNextLine() && input2.hasNextLine()){
-		    var first = input1.nextLine();   
-		    var second = input2.nextLine(); 
-		    
-		    if(!first.equals(second)){
-		    	System.out.println("Differences found: "+"\n"+first+'\n'+second);
-		        return false;
-		    }
+	public static boolean filesEqual(File f1, File f2) throws FileNotFoundException {
+		Scanner input1 = new Scanner(f1);// read first file
+		Scanner input2 = new Scanner(f2);// read second file
+
+		while (input1.hasNextLine() && input2.hasNextLine()) {
+			var first = input1.nextLine();
+			var second = input2.nextLine();
+
+			if (!first.equals(second)) {
+				System.out.println("Differences found: " + "\n" + first + '\n' + second);
+				input1.close();
+				input2.close();
+				return false;
+			}
 		}
+		input1.close();
+		input2.close();
 		return true;
+	}
+
+	private void copyFolderContent(File parentDir, File targetDir) {
+		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
+			throw new IllegalArgumentException("parentDir must be a directory");
+		}
+		for (File file : parentDir.listFiles()) {
+			if (file.isDirectory()) {
+				copyFolderContent(file, ensureDirectories(targetDir, file.getName()).get(0));
+			} else {
+				try {
+					Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()),
+							StandardCopyOption.REPLACE_EXISTING);
+				} catch (IOException e) {
+					err.println(e.getMessage());
+				}
+			}
+		}
 	}
 
 	private void moveFolderContent(File parentDir, File targetDir) {
