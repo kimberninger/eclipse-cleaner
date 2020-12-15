@@ -6,12 +6,12 @@
 - Musterlösung herunterladen
 - FileList.txt erstellen oder herunterladen
 - **leeres** Ausgabeverzeichnis erstellen
-## Programm nutzen
+### Programm nutzen
 - Programm öffnen und im gui die heruntergeladenen Zip-Verzeichnisse und den Ausgabeordner wählen
 - Ausführen drücken
 - wenn alles klappt am Besten den log im Ausgabevertzeichnis speichern
 
-## In Eclipse importieren
+### In Eclipse importieren
 - Import project->Existing Projects into Workspace
 - Dann bei select root directory den Ausgabeordner wählen
 -  Viel Spaß beim Korrigieren :D
@@ -21,4 +21,9 @@
 
 ## Mitwirkende
 - Kim Berninger (Ersteller)
+    - Base Structure
+    - Gui
+    - Command Line Mode
 - Ruben Deisenroth
+  - File Extractor
+  - Quality of Life improvements
