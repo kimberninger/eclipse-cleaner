@@ -27,6 +27,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.DefaultCaret;
 
 import project_cleaner.ProjectCleaner;
+import project_cleaner.SubmissionsExtractor;
 
 import static javax.swing.GroupLayout.Alignment.BASELINE;
 import static javax.swing.GroupLayout.Alignment.LEADING;
@@ -39,7 +40,7 @@ public class ProjectCleanerDialog extends JFrame {
     private JTextField solutionFileField;
     private JTextField fileListFileField;
     private JTextField outputDirectoryField;
-
+    private String lastDirectory;
     private JButton executeButton;
 
     private JTextPane logTextPane;
@@ -81,8 +82,8 @@ public class ProjectCleanerDialog extends JFrame {
     private void updateExecuteButtonState() {
         executeButton.setEnabled(
             !submissionsFileField.getText().isBlank()
-            && !solutionFileField.getText().isBlank()
-            && !fileListFileField.getText().isBlank()
+            //&& !solutionFileField.getText().isBlank()
+            //&& !fileListFileField.getText().isBlank()
             && !outputDirectoryField.getText().isBlank());
     }
 
@@ -135,14 +136,22 @@ public class ProjectCleanerDialog extends JFrame {
         executeButton = new JButton("Ausführen!");
         executeButton.addActionListener(e -> {
             try {
+            	/*
                 var cleaner = new ProjectCleaner(
                     new File(submissionsFileField.getText()),
                     new File(solutionFileField.getText()),
                     new File(fileListFileField.getText()),
                     new File(outputDirectoryField.getText()));
                 cleaner.setCompressProjects(extractCheckBox.isSelected());
-                cleaner.cleanSubmissions();
-            } catch (IOException ex) {
+                cleaner.cleanSubmissions();*/
+            	var extractor = new SubmissionsExtractor(
+            			submissionsFileField.getText().equals("") ? null : new File(submissionsFileField.getText()),  
+            			outputDirectoryField.getText().equals("") ? null : new File(outputDirectoryField.getText()), 
+            			solutionFileField.getText().equals("") ? null : new File(solutionFileField.getText()), 
+            			fileListFileField.getText().equals("") ? null : new File(fileListFileField.getText()), 
+            			getOut(), getErr());
+            	extractor.extract();
+            } catch (Exception ex) {
                 System.err.println(ex.getMessage());
             }
         });
@@ -171,7 +180,8 @@ public class ProjectCleanerDialog extends JFrame {
         var outputDirectoryChooserButton = new JButton("Auswählen…");
 
         submissionsFileChooserButton.addActionListener(e -> {
-            var chooser = new JFileChooser(submissionsFileField.getText());
+        	
+            var chooser = new JFileChooser(lastDirectory == null ? submissionsFileField.getText(): lastDirectory);
             chooser.setDialogTitle("Wo liegen die studentischen Abgaben?");
             chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
             chooser.setFileFilter(new FileNameExtensionFilter(
@@ -181,13 +191,15 @@ public class ProjectCleanerDialog extends JFrame {
             if (returnState == JFileChooser.APPROVE_OPTION) {
                 submissionsFileField
                     .setText(chooser.getSelectedFile().getAbsolutePath());
+                lastDirectory = chooser.getSelectedFile().getAbsolutePath();
                 updateExecuteButtonState();
+                getOut().println("Abgabeverzeichnis ausgewählt: " + chooser.getSelectedFile().getAbsolutePath());
             }
         });
 
         solutionFileFieldChooserButton.addActionListener(e -> {
-            var chooser = new JFileChooser(solutionFileField.getText());
-            chooser.setDialogTitle("Wo liegen die studentischen Abgaben?");
+            var chooser = new JFileChooser(lastDirectory == null ? solutionFileField.getText() : lastDirectory);
+            chooser.setDialogTitle("Wo liegt die Referenzlösung?");
             chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
             chooser.setFileFilter(new FileNameExtensionFilter(
                 "Projekt-Ordner oder ZIP-archivierte Projekte", "zip"));
@@ -196,13 +208,15 @@ public class ProjectCleanerDialog extends JFrame {
             if (returnState == JFileChooser.APPROVE_OPTION) {
                 solutionFileField
                     .setText(chooser.getSelectedFile().getAbsolutePath());
+                lastDirectory = chooser.getSelectedFile().getAbsolutePath();
                 updateExecuteButtonState();
+                getOut().println("Referenzlösung ausgewählt: " + chooser.getSelectedFile().getAbsolutePath());
             }
         });
 
         fileListFileChooserButton.addActionListener(e -> {
-            var chooser = new JFileChooser(fileListFileField.getText());
-            chooser.setDialogTitle("Wo liegen die studentischen Abgaben?");
+            var chooser = new JFileChooser(lastDirectory == null? fileListFileField.getText() : lastDirectory);
+            chooser.setDialogTitle("Wo liegt die Dateiliste?");
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             chooser.setFileFilter(new FileNameExtensionFilter(
                 "Projekt-Ordner oder ZIP-archivierte Projekte", "txt"));
@@ -211,20 +225,24 @@ public class ProjectCleanerDialog extends JFrame {
             if (returnState == JFileChooser.APPROVE_OPTION) {
                 fileListFileField
                     .setText(chooser.getSelectedFile().getAbsolutePath());
+                lastDirectory = chooser.getSelectedFile().getAbsolutePath();
                 updateExecuteButtonState();
+                getOut().println("Dateiliste ausgewählt: " + chooser.getSelectedFile().getAbsolutePath());
             }
         });
 
         outputDirectoryChooserButton.addActionListener(e -> {
-            var chooser = new JFileChooser(outputDirectoryField.getText());
-            chooser.setDialogTitle("Wo liegen die studentischen Abgaben?");
+            var chooser = new JFileChooser(lastDirectory == null? outputDirectoryField.getText(): lastDirectory);
+            chooser.setDialogTitle("Wohin soll exportiert werden?");
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 
             var returnState = chooser.showDialog(this, "Auswählen");
             if (returnState == JFileChooser.APPROVE_OPTION) {
                 outputDirectoryField
                     .setText(chooser.getSelectedFile().getAbsolutePath());
+                lastDirectory = chooser.getSelectedFile().getAbsolutePath();
                 updateExecuteButtonState();
+                getOut().println("Ausgabeverzeichnis ausgewählt: " + chooser.getSelectedFile().getAbsolutePath());
             }
         });
 
