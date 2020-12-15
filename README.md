@@ -14,3 +14,7 @@
 
 ## Bekannte Fehler
 - Altuell macht die Option Abgaben Entpacken noch  (ist immer an)
+
+## Mitwirkende
+- Kim Berninger (Ersteller)
+- Ruben Deisenroth
