@@ -16,8 +16,18 @@
 - Dann bei select root directory den Ausgabeordner wählen
 -  Viel Spaß beim Korrigieren :D
 
+## Dateiliste Erstellen
+Die Dateiliste kann verwendet werden, um Dateien aus der Referenzlösung in alle Abgaben zu kopieren, oder deren Existenz zu prüfen. Dabei müssen alle in der Liste vorkommenden Dateien im Lösungsverzeichnis vorkommen, sonst werden sie ignoriert.
+### Modi
+- `assert_exists`: Gibt Warnung wenn Datei fehlt (wird **nicht** überschrieben)  
+- `assert_not_exists`: Gibt eine Warnung wenn Datei existiert (z.B. Tutorentests)
+- `overwrite_always`: Überschreibt bzw. erstellt Dateien ohne Meldung  
+- `copy_if_not_exists`: Kopiert nur wenn Datei noch nicht existiert
+- `ignore`: ignoriert Dateien (z.B. sinvoll für bin ordner)  
+Standartmodus Dateiliste: `assert_exists`
+Standartmodus für Dateien die nicht in der Liste Sind: `copy_if_not_exists`
 ## Bekannte Fehler
-- Altuell macht die Option Abgaben Entpacken noch  (ist immer an)
+- Altuell macht die Option Abgaben Entpacken noch nichts (ist immer an)
 
 ## Mitwirkende
 - Kim Berninger (Ersteller)
