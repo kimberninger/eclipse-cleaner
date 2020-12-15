@@ -59,93 +59,63 @@ public class ProjectCleaner {
     }
 
     public void cleanSubmissions() {
-        if (submissionsFile.isDirectory()) {
-            cleanSubmissionDirectory();
-        } else if (submissionsFile.getName().endsWith(".zip")) {
-            cleanSubmissionArchive();
-        } else {
-            System.err.println("Moodle-Abgaben konnten nicht geöffnet werden.");
-        }
-    }
-
-    private void cleanSubmissionDirectory() {
         try (var projects = Files.find(
             submissionsFile.toPath(), Integer.MAX_VALUE, (path, attributes) ->
                 path.getFileName().toString().toLowerCase().endsWith(".zip"))) {
-            projects.forEach(this::cleanProjectWithSolutionDirectory);
+            projects.forEach(project -> {
+                if (solutionFile.isDirectory()) {
+                    try (var solutionReader = new ProjectDirectoryReader(solutionFile)) {
+                        
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                } else if (solutionFile.getName().toLowerCase().endsWith(".zip")) {
+                    try (var solutionReader = new ProjectArchiveReader(solutionFile)) {
+                        
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
         } catch (IOException e) {
             System.err.format(
                 "Das Verzeichnis %s konnte nicht durchsucht werden",
                 submissionsFile);
         }
     }
-    
-    private void cleanProjectWithSolutionDirectory(Path projectArchive) {
-        System.out.println(projectArchive.getFileName());
-    }
-    
-    private void cleanProjectWithSolutionArchive(Path projectArchive) {
-        /*System.out.println(projectArchive.getFileName());
-        var buffer = new byte[2048];
 
-        try (
-            var studentStream = new ZipInputStream(
-                new BufferedInputStream(
-                    new FileInputStream(projectArchive.toFile())));
-            var solutionStream = new ZipInputStream(
-                new BufferedInputStream(
-                    new FileInputStream(solutionFile)));
-            var outputStream = new ZipOutputStream(
-                new BufferedOutputStream(
-                    new FileOutputStream(cleanedFile)))) {
-            ZipEntry inputEntry;
-
-            while ((inputEntry = inputStream.getNextEntry()) != null) {
-                var outputEntry = new ZipEntry(inputEntry.getName());
-                outputStream.putNextEntry(outputEntry);
-                
-                int entryLength;
-                while ((entryLength = inputStream.read(buffer)) > 0) {
-                    outputStream.write(buffer, 0, entryLength);
-                }
-            }
-        } catch (FileNotFoundException e) {
+    private <I, O> void cleanProject(
+        Path projectPath,
+        ProjectReader<I> solutionReader,
+        Function<? super I, ? extends O> entryMapper
+    ) {
+        try {
+            var submissionReader = new ProjectArchiveReader(projectPath.toFile());
+        } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-        }*/
+        }
     }
 
-    private void cleanSubmissionArchive() {
-        System.out.println("Zip!");
-        /*var buffer = new byte[2048];
-        try (
-            var inputStream = new ZipInputStream(
-                new BufferedInputStream(
-                    new FileInputStream(solutionFile)));
-            var outputStream = new ZipOutputStream(
-                new BufferedOutputStream(
-                    new FileOutputStream(cleanedFile)))) {
-            ZipEntry inputEntry;
+    private <I, O> void hurr(
+        ProjectReader<I> reader,
+        ProjectWriter<O> writer,
+        Function<? super I, ? extends O> entryMapper
+    ) throws IOException {
+        byte[] buffer = new byte[2048];
+        I entry;
+        while ((entry = reader.getNextEntry()) != null) {
+            writer.putNextEntry(entryMapper.apply(entry));
 
-            while ((inputEntry = inputStream.getNextEntry()) != null) {
-                var outputEntry = new ZipEntry(inputEntry.getName());
-                outputStream.putNextEntry(outputEntry);
-                
-                int entryLength;
-                while ((entryLength = inputStream.read(buffer)) > 0) {
-                    outputStream.write(buffer, 0, entryLength);
-                }
+            int entryLength;
+            while ((entryLength = reader.readEntry(buffer)) > 0) {
+                writer.writeEntry(buffer, 0, entryLength);
             }
-        } catch (FileNotFoundException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-        }*/
+        }
     }
 
     public static void main(String[] args) {
@@ -207,23 +177,6 @@ public class ProjectCleaner {
             e.printStackTrace();
         } catch (Exception e) {
             e.printStackTrace();
-        }
-    }
-
-    private <I, O> void cleanProject(
-        ProjectReader<I> reader,
-        ProjectWriter<O> writer,
-        Function<? super I, ? extends O> entryMapper
-    ) throws IOException {
-        byte[] buffer = new byte[2048];
-        I entry;
-        while ((entry = reader.getNextEntry()) != null) {
-            writer.putNextEntry(entryMapper.apply(entry));
-
-            int entryLength;
-            while ((entryLength = reader.readEntry(buffer)) > 0) {
-                writer.writeEntry(buffer, 0, entryLength);
-            }
         }
     }
 }
