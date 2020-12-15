@@ -26,7 +26,6 @@ import javax.swing.WindowConstants;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.DefaultCaret;
 
-import project_cleaner.ProjectCleaner;
 import project_cleaner.SubmissionsExtractor;
 
 import static javax.swing.GroupLayout.Alignment.BASELINE;
