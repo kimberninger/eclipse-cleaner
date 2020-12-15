@@ -3,6 +3,7 @@ package project_cleaner;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -12,6 +13,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Scanner;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -332,14 +334,33 @@ public class SubmissionsExtractor {
 				try {
 					Path target = Paths.get(targetDir.getAbsolutePath(), file.getName());
 					if (!target.toFile().exists()) {
-						System.out.println("Copying file " + file.getName());
+						//System.out.println("Copying file " + file.getName());
 						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
-					}
+					} /*else if(!filesEqual(file, target.toFile())) {
+						System.err.println("File " + file.getName() + "was Modified");
+						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
+					}*/
 				} catch (IOException e) {
 					err.println(e.getMessage());
 				}
 			}
 		}
+	}
+	
+	public static boolean filesEqual(File f1, File f2) throws FileNotFoundException {
+		Scanner input1 = new Scanner(f1);//read first file
+		Scanner input2 = new Scanner(f2);//read second file
+
+		while(input1.hasNextLine() && input2.hasNextLine()){
+		    var first = input1.nextLine();   
+		    var second = input2.nextLine(); 
+		    
+		    if(!first.equals(second)){
+		    	System.out.println("Differences found: "+"\n"+first+'\n'+second);
+		        return false;
+		    }
+		}
+		return true;
 	}
 
 	private void moveFolderContent(File parentDir, File targetDir) {
