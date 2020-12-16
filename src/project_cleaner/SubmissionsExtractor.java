@@ -391,6 +391,19 @@ public class SubmissionsExtractor {
 		}
 	}
 
+	/**
+	 * Recursively merges projects
+	 * 
+	 * @param solutionDir     the solution directory
+	 * @param targetDir       the target directory
+	 * @param assertExist     the List of Files to assert exist
+	 * @param assertNotExist  the List of Files to assert not exist
+	 * @param overwrite       the List of files to overwrite
+	 * @param copyIfNotExists the List of Files to copy if not present in target
+	 *                        directory
+	 * @param ignore          the list of files to skip checking (can contain
+	 *                        folders, will prevent subfolder checking)
+	 */
 	private void mergeProjectContent(File solutionDir, File targetDir, ArrayList<Path> assertExist,
 			ArrayList<Path> assertNotExist, ArrayList<Path> overwrite, ArrayList<Path> copyIfNotExists,
 			ArrayList<Path> ignore) {
@@ -403,18 +416,39 @@ public class SubmissionsExtractor {
 			if (ignore.contains(filePath)) {
 				continue;
 			}
+			var assertedExistsTriggered = false;
+			var assertedNotExistsTriggered = false;
 			// assert exist mode
 			if (assertExist.contains(filePath)) {
 				if (!Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile().exists()) {
 					err.println("File " + file.getName() + " missing...");
-					continue;
+					assertedExistsTriggered = true;
+//					continue;
+				}
+			}
+			// assert Not Exist Mode
+			if (assertNotExist.contains(filePath)) {
+				if (Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile().exists()) {
+					err.println("File " + file.getName() + " existing in Submission...");
+					assertedNotExistsTriggered = true;
+					// continue;
 				}
 			}
 			if (file.isDirectory()) {
 				// Copy_if_not_exists and overwrite_always mode for directories
 				if (overwrite.contains(file.toPath().toAbsolutePath())) {
+					if (assertedNotExistsTriggered) {
+						err.println("Overwriting file that should not have existed:" + file.getName());
+					}
 					copyFolderContent(file, Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile());
 					continue;
+				}
+				if (assertedExistsTriggered) {
+					if(!copyIfNotExists.contains(filePath)) {
+						continue; // If the directory doesn't exist subfiles wont exist neither
+					} else {
+						err.println("WARNUNG: Verzeichnis das in Abgabe existieren sollte wird aus der Lösung kopiert:" + file.getName() + " DIESES VERZEICHNIS NICHT BEWERTEN");
+					}
 				}
 				mergeProjectContent(file, ensureDirectories(targetDir, file.getName()).get(0), assertExist,
 						assertNotExist, overwrite, copyIfNotExists, ignore);
@@ -423,16 +457,27 @@ public class SubmissionsExtractor {
 					Path target = Paths.get(targetDir.getAbsolutePath(), file.getName());
 					// Copy_if_not_exists and overwrite_always mode for files
 					if (!target.toFile().exists()) {
-						// System.out.println("Copying file " + file.getName());
+						if(assertedExistsTriggered) {
+							if(!copyIfNotExists.contains(filePath)) {
+								continue;
+							} else {
+								err.println("WARNUNG: Datei die in Abgabe existieren sollte wird aus der Lösung kopiert:" + file.getName() + " DIESE DATEI NICHT BEWERTEN");
+							}
+						}
+//						System.out.println("Copying file " + file.getName());
 						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
-					} else if(overwrite.contains(filePath)) {
-						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()), StandardCopyOption.REPLACE_EXISTING);
+					} else if (overwrite.contains(filePath)) {
+						if(assertedNotExistsTriggered) {
+							err.println("Overwriting file that should not have existed:" + file.getName());
+						}
+						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()),
+								StandardCopyOption.REPLACE_EXISTING);
 					}
 					/*
-						 * else if(!filesEqual(file, target.toFile())) { System.err.println("File " +
-						 * file.getName() + "was Modified"); Files.copy(file.toPath(),
-						 * Paths.get(targetDir.getAbsolutePath(), file.getName())); }
-						 */
+					 * else if(!filesEqual(file, target.toFile())) { System.err.println("File " +
+					 * file.getName() + "was Modified"); Files.copy(file.toPath(),
+					 * Paths.get(targetDir.getAbsolutePath(), file.getName())); }
+					 */
 				} catch (IOException e) {
 					err.println(e.getMessage());
 				}
@@ -440,6 +485,14 @@ public class SubmissionsExtractor {
 		}
 	}
 
+	/**
+	 * Compares the content of two files
+	 * 
+	 * @param f1 the first file
+	 * @param f2 the second file
+	 * @return true if contents equal
+	 * @throws FileNotFoundException
+	 */
 	public static boolean filesEqual(File f1, File f2) throws FileNotFoundException {
 		Scanner input1 = new Scanner(f1);// read first file
 		Scanner input2 = new Scanner(f2);// read second file
