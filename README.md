@@ -28,7 +28,7 @@ Die Dateiliste kann verwendet werden, um Dateien aus der Referenzlösung in alle
 Standartmodus Dateiliste: `assert_exists`  
 Standartmodus für Dateien die nicht in der Liste Sind: `copy_if_not_exists`
 ## Bekannte Fehler
-- Altuell macht die Option Abgaben Entpacken noch nichts (ist immer an)
+- Aktuell macht die Option Abgaben Entpacken noch nichts (ist immer an)
 
 ## Mitwirkende
 - Kim Berninger (Ersteller)
