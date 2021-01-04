@@ -16,12 +16,13 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import org.w3c.dom.*;
+
 import javax.swing.JOptionPane;
+import javax.swing.JProgressBar;
+import javax.swing.SwingWorker;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.Transformer;
@@ -29,13 +30,16 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-public class SubmissionsExtractor {
+import org.w3c.dom.Document;
+
+public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private File submissionFile;
 	private File outputDir;
 	private PrintStream log = System.out;
 	private PrintStream err = System.err;
 	private File solutionArchive;
 	private File fileList;
+	private JProgressBar pb;
 
 	private enum FileReadMode {
 		ASSERT_EXISTS, OVERWRITE_ALWAYS, COPY_IF_NOT_EXISTS, ASSERT_NOT_EXISTS, IGNORE
@@ -63,9 +67,18 @@ public class SubmissionsExtractor {
 		this(submissionFile, outputDir, solutionArchive, log, err);
 		this.fileList = fileList;
 	}
+	
+	public void setProgressBar(JProgressBar pb) {
+		this.pb = pb;
+	}
+	
+	public JProgressBar getProgressBar() {
+		return pb;
+	}
 
 	public void extract() {
 		log.println("Vorbereitung...");
+		Thread.yield();
 		if (!EnsureEmpty(outputDir)) {
 			err.println("Target directory not empty, aborting");
 			return;
@@ -172,8 +185,16 @@ public class SubmissionsExtractor {
 		// Extract The individual submissions
 		int fileCount = 0;
 		int successfullCount = 0;
+		var submissions = tempAllSubsFolder.listFiles();
+		if(pb != null) {
+			pb.setMinimum(0);
+			pb.setMaximum(submissions.length);
+			pb.setValue(0);
+			pb.setString(String.format("%s/%s Abgaben fertig", pb.getValue(), pb.getMaximum()));
+			pb.setEnabled(true);
+		}
 		log.println("Extracting Projects...");
-		for (File submission : tempAllSubsFolder.listFiles()) {
+		for (File submission : submissions) {
 			fileCount++;
 			if (!submission.isDirectory() || submission.listFiles().length != 1) {
 				err.println("Cannot Extract submission " + submission.getName()
@@ -206,6 +227,18 @@ public class SubmissionsExtractor {
 				err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
 				moveFolderContent(submission, faultyDir);
 				continue;
+			}
+			if (Stream.of(tempCurrentSubFolder.listFiles())
+					.anyMatch(x -> x.isDirectory() && x.getName().equals("__MACOSX"))) {
+				System.out.println("removing __MACOSX folder");
+				File macosxFolder = Stream.of(tempCurrentSubFolder.listFiles())
+						.filter(x -> x.isDirectory() && x.getName().equals("__MACOSX")).findFirst().get();
+				clearFolder(macosxFolder);
+				if (macosxFolder.delete()) {
+					// System.out.println("Removed" + " __MACOSX-Folder");
+				} else {
+					System.out.println("Cannot remove" + " __MACOSX-Folder");
+				}
 			}
 			File submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
 			/*
@@ -288,6 +321,10 @@ public class SubmissionsExtractor {
 			}
 			moveFolderContent(tempCurrentSubFolder, outputDir);
 			successfullCount++;
+			if(pb != null) {
+				pb.setValue(fileCount);
+				pb.setString(String.format("%s/%s Abgaben fertig", pb.getValue(), pb.getMaximum()));
+			}
 			continue;
 		}
 		log.println("Cleanup...");
@@ -297,6 +334,12 @@ public class SubmissionsExtractor {
 				fileCount - successfullCount));
 	}
 
+	/**
+	 * Extracts all the contents of a ZIP-Archive
+	 * 
+	 * @param zipFile       the ZIP-Archive
+	 * @param extractFolder the destination directory
+	 */
 	private void extractFolder(String zipFile, String extractFolder) {
 		try {
 			int BUFFER = 2048;
@@ -348,6 +391,13 @@ public class SubmissionsExtractor {
 
 	}
 
+	/**
+	 * Ensures a Folder is empty, prompts a dialog asking to clear it if not empty
+	 * 
+	 * @param directory the folder to ensure is empty
+	 * @param whitelist a List of files that are allowed in the folder
+	 * @return true if the folder is empty now, false if not
+	 */
 	private boolean EnsureEmpty(File directory, String... whitelist) {
 		if (!directory.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
@@ -367,6 +417,11 @@ public class SubmissionsExtractor {
 		return true;
 	}
 
+	/**
+	 * remove all the Contents of a given Folder
+	 * 
+	 * @param folder the folder to clear
+	 */
 	private void clearFolder(File folder) {
 		if (!folder.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
@@ -444,10 +499,11 @@ public class SubmissionsExtractor {
 					continue;
 				}
 				if (assertedExistsTriggered) {
-					if(!copyIfNotExists.contains(filePath)) {
+					if (!copyIfNotExists.contains(filePath)) {
 						continue; // If the directory doesn't exist subfiles wont exist neither
 					} else {
-						err.println("WARNUNG: Verzeichnis das in Abgabe existieren sollte wird aus der Lösung kopiert:" + file.getName() + " DIESES VERZEICHNIS NICHT BEWERTEN");
+						err.println("WARNUNG: Verzeichnis das in Abgabe existieren sollte wird aus der Lösung kopiert:"
+								+ file.getName() + " DIESES VERZEICHNIS NICHT BEWERTEN");
 					}
 				}
 				mergeProjectContent(file, ensureDirectories(targetDir, file.getName()).get(0), assertExist,
@@ -457,17 +513,19 @@ public class SubmissionsExtractor {
 					Path target = Paths.get(targetDir.getAbsolutePath(), file.getName());
 					// Copy_if_not_exists and overwrite_always mode for files
 					if (!target.toFile().exists()) {
-						if(assertedExistsTriggered) {
-							if(!copyIfNotExists.contains(filePath)) {
+						if (assertedExistsTriggered) {
+							if (!copyIfNotExists.contains(filePath)) {
 								continue;
 							} else {
-								err.println("WARNUNG: Datei die in Abgabe existieren sollte wird aus der Lösung kopiert:" + file.getName() + " DIESE DATEI NICHT BEWERTEN");
+								err.println(
+										"WARNUNG: Datei die in Abgabe existieren sollte wird aus der Lösung kopiert:"
+												+ file.getName() + " DIESE DATEI NICHT BEWERTEN");
 							}
 						}
 //						System.out.println("Copying file " + file.getName());
 						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()));
 					} else if (overwrite.contains(filePath)) {
-						if(assertedNotExistsTriggered) {
+						if (assertedNotExistsTriggered) {
 							err.println("Overwriting file that should not have existed:" + file.getName());
 						}
 						Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()),
@@ -513,6 +571,12 @@ public class SubmissionsExtractor {
 		return true;
 	}
 
+	/**
+	 * Copy the contents of a Folder to a target folder
+	 * 
+	 * @param parentDir the source folder
+	 * @param targetDir the destination folder
+	 */
 	private void copyFolderContent(File parentDir, File targetDir) {
 		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
@@ -531,6 +595,12 @@ public class SubmissionsExtractor {
 		}
 	}
 
+	/**
+	 * Move the content of a folder to a target folder recursively
+	 * 
+	 * @param parentDir the source folder
+	 * @param targetDir the destination folder
+	 */
 	private void moveFolderContent(File parentDir, File targetDir) {
 		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
@@ -573,5 +643,11 @@ public class SubmissionsExtractor {
 			createdDirs.add(wantedFolder.toFile());
 		}
 		return createdDirs;
+	}
+
+	@Override
+	protected String doInBackground() throws Exception {
+		extract();
+		return null;
 	}
 }

@@ -6,7 +6,6 @@
 package project_cleaner.ui;
 
 import java.awt.Color;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -17,14 +16,11 @@ import java.nio.file.Paths;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.UIDefaults;
-import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.ColorUIResource;
-import javax.swing.text.Style;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
+import javax.swing.text.DefaultCaret;
 
 
 /**
@@ -74,6 +70,8 @@ public class MainGui extends javax.swing.JFrame {
         outputDirectoryField.getDocument().addDocumentListener(filePathUpdateListener);
         solutionFileField.getDocument().addDocumentListener(filePathUpdateListener);
         fileListFileField.getDocument().addDocumentListener(filePathUpdateListener);
+        // Make Scroll Pane Scroll down automatically
+        ((DefaultCaret)logTextPane.getCaret()).setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
         System.setOut(getOut());
         System.setErr(getErr());
     }
@@ -669,7 +667,9 @@ public class MainGui extends javax.swing.JFrame {
                 			solutionFileField.getText().equals("") ? null : new File(solutionFileField.getText()), 
                 			fileListFileField.getText().equals("") ? null : new File(fileListFileField.getText()), 
                 			getOut(), getErr());
-                	extractor.extract();
+//                	extractor.extract();
+                	extractor.setProgressBar(jProgressBar1);
+                	extractor.execute();
                 } catch (Exception ex) {
                     System.err.println(ex.getMessage());
                 }

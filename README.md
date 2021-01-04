@@ -17,7 +17,13 @@
 -  Viel Spaß beim Korrigieren :D
 
 ## Dateiliste Erstellen
-Die Dateiliste kann verwendet werden, um Dateien aus der Referenzlösung in alle Abgaben zu kopieren, oder deren Existenz zu prüfen. Dabei müssen alle in der Liste vorkommenden Dateien im Lösungsverzeichnis vorkommen, sonst werden sie ignoriert.
+Die Dateiliste kann verwendet werden, um Dateien aus der Referenzlösung in alle Abgaben zu kopieren, oder deren Existenz zu prüfen. Dabei müssen alle in der Liste vorkommenden Dateien im Lösungsverzeichnis vorkommen, sonst werden sie ignoriert.  
+Für Java-Projekte ist der folgende Befehl hilfreich:
+
+```bash
+find . -not -path "./bin/*" -not -path "./bin" -not -path "." -not -path "./.project" 
+```
+
 ### Modi
 - `assert_exists`: Gibt Warnung wenn Datei fehlt (wird **nicht** überschrieben)  
 - `assert_not_exists`: Gibt eine Warnung wenn Datei existiert (z.B. sinvoll bei Tutorentests)
@@ -29,6 +35,10 @@ Standartmodus Dateiliste: `assert_exists`
 Standartmodus für Dateien die nicht in der Liste Sind: `copy_if_not_exists`
 ## Bekannte Fehler
 - Altuell macht die Option Abgaben Entpacken noch nichts (ist immer an)
+
+## Geplante Features
+- Racket Modus
+- Bessere Logs/Ausgaben (ggf als HTML)
 
 ## Mitwirkende
 - Kim Berninger (Ersteller)

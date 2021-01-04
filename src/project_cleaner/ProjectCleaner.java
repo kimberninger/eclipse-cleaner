@@ -69,10 +69,6 @@ public class ProjectCleaner {
 
 		switch (args.length) {
 		case 0:
-//                var dialog = new ProjectCleanerDialog();
-//                System.setOut(dialog.getOut());
-//                System.setErr(dialog.getErr());
-//                SwingUtilities.invokeLater(dialog::start);
 			try {
 				for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
 					if ("Nimbus".equals(info.getName())) {
@@ -93,6 +89,10 @@ public class ProjectCleaner {
 				java.util.logging.Logger.getLogger(MainGui.class.getName()).log(java.util.logging.Level.SEVERE, null,
 						ex);
 			}
+//                var dialog = new ProjectCleanerDialog();
+//                System.setOut(dialog.getOut());
+//                System.setErr(dialog.getErr());
+//                SwingUtilities.invokeLater(dialog::start);
 			java.awt.EventQueue.invokeLater(new Runnable() {
 				public void run() {
 					new MainGui().setVisible(true);
