@@ -9,18 +9,21 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import javax.swing.JOptionPane;
+import javax.swing.JProgressBar;
 
 /**
  * A Helper Class for working with {@link File}s
@@ -169,7 +172,8 @@ public final class FileUtils {
 	 */
 	public static boolean EnsureEmpty(File directory, String... whitelist) {
 		if (!directory.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
+			System.err.println("parentDir must be a directory");
+			return false;
 		}
 		for (final File f : directory.listFiles()) {
 			if (!Arrays.stream(whitelist).anyMatch(x -> x == f.getName())) {
@@ -240,5 +244,90 @@ public final class FileUtils {
 		} catch (Exception e) {
 			System.err.println("ERROR: " + e.getMessage());
 		}
+	}
+
+	/**
+	 * Extracts all the contents of a ZIP-Archive
+	 * 
+	 * @param zipFile       the ZIP-Archive
+	 * @param extractFolder the destination directory
+	 * @param bar           the Progress bar to track the progress with
+	 */
+	public static void extractFolder(String zipFile, String extractFolder, JProgressBar bar) {
+		try {
+			int BUFFER = 2048;
+			File file = new File(zipFile);
+
+			ZipFile zip = new ZipFile(file);
+			String newPath = extractFolder;
+
+			new File(newPath).mkdir();
+			var zipFileEntries = Collections.list(zip.entries());
+			bar.setMinimum(0);
+			bar.setValue(0);
+			bar.setMaximum(zipFileEntries.size());
+			bar.setEnabled(true);
+			bar.setStringPainted(true);
+			bar.setString(String.format("%s/%s Dateien entpackt", bar.getValue(), bar.getMaximum()));
+			int done = 0;
+			// Process each entry
+			for (ZipEntry entry : zipFileEntries) {
+				String currentEntry = entry.getName();
+
+				File destFile = new File(newPath, currentEntry);
+				// destFile = new File(newPath, destFile.getName());
+				File destinationParent = destFile.getParentFile();
+
+				// create the parent directory structure if needed
+				destinationParent.mkdirs();
+
+				if (!entry.isDirectory()) {
+					BufferedInputStream is = new BufferedInputStream(zip.getInputStream(entry));
+					int currentByte;
+					// establish buffer for writing file
+					byte data[] = new byte[BUFFER];
+
+					// write the current file to disk
+					FileOutputStream fos = new FileOutputStream(destFile);
+					BufferedOutputStream dest = new BufferedOutputStream(fos, BUFFER);
+
+					// read and write until last byte is encountered
+					while ((currentByte = is.read(data, 0, BUFFER)) != -1) {
+						dest.write(data, 0, currentByte);
+					}
+					dest.flush();
+					dest.close();
+					is.close();
+				}
+				bar.setValue(++done);
+				bar.setString(String.format("%s/%s Dateien entpackt", bar.getValue(), bar.getMaximum()));
+			}
+			zip.close();
+		} catch (Exception e) {
+			System.err.println("ERROR: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Creates a Text file and writes (or overwrites) the given String as content of
+	 * that file
+	 * 
+	 * @param p the {@link Path} to create the File
+	 * @param s the new File Content
+	 * @return the created/Modified text-{@link File}
+	 */
+	public static File createTextFile(Path p, String s) {
+		File textFile = new File(p.toAbsolutePath().toString());
+		PrintWriter textFileWriter;
+		try {
+			textFileWriter = new PrintWriter(textFile);
+			textFileWriter.print(s);
+			textFileWriter.flush();
+			textFileWriter.close();
+		} catch (FileNotFoundException e) {
+			// We should never end up here, since we create the File
+			e.printStackTrace();
+		}
+		return textFile;
 	}
 }

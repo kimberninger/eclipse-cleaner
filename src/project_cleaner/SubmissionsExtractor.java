@@ -1,11 +1,15 @@
 package project_cleaner;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import static project_cleaner.FileUtils.EnsureEmpty;
+import static project_cleaner.FileUtils.clearFolder;
+import static project_cleaner.FileUtils.copyFolderContent;
+import static project_cleaner.FileUtils.ensureDirectories;
+import static project_cleaner.FileUtils.extractFolder;
+import static project_cleaner.FileUtils.moveFolderContent;
+import static project_cleaner.FileUtils.removeFolders;
+
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -15,12 +19,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Scanner;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
-import javax.swing.JOptionPane;
 import javax.swing.JProgressBar;
 import javax.swing.SwingWorker;
 import javax.xml.parsers.DocumentBuilder;
@@ -32,7 +32,12 @@ import javax.xml.transform.stream.StreamResult;
 
 import org.w3c.dom.Document;
 
+import com.google.gson.Gson;
+
 public class SubmissionsExtractor extends SwingWorker<String, Object> {
+
+	// -- Attributes --\\
+
 	private File submissionFile;
 	private File outputDir;
 	private PrintStream log = System.out;
@@ -40,10 +45,16 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private File solutionArchive;
 	private File fileList;
 	private JProgressBar pb;
+	private LanguageMode languageMode = LanguageMode.JAVA;
+	private ActionSetModel instructionSet;
+	private boolean automaticallyFixNamingConvention = true;
+	private RacoAdapter raco;
 
 	private enum FileReadMode {
 		ASSERT_EXISTS, OVERWRITE_ALWAYS, COPY_IF_NOT_EXISTS, ASSERT_NOT_EXISTS, IGNORE
 	}
+
+	// -- Constructors --\\
 
 	public SubmissionsExtractor(File submissionFile, File outputDir) {
 		this.submissionFile = submissionFile;
@@ -67,14 +78,26 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		this(submissionFile, outputDir, solutionArchive, log, err);
 		this.fileList = fileList;
 	}
-	
+
+	// -- Getters+Setters --\\
+
 	public void setProgressBar(JProgressBar pb) {
 		this.pb = pb;
 	}
-	
+
 	public JProgressBar getProgressBar() {
 		return pb;
 	}
+
+	public void setLanguageMode(LanguageMode languageMode) {
+		this.languageMode = languageMode;
+	}
+
+	public LanguageMode getLanguageMode() {
+		return languageMode;
+	}
+
+	// -- Main Methods --\\
 
 	public void extract() {
 		log.println("Vorbereitung...");
@@ -91,12 +114,8 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		// Extract the main Zip File
 		extractFolder(submissionFile.getAbsolutePath(), tempAllSubsFolder.getAbsolutePath());
 		File solutionFolder = null;
-		ArrayList<Path> filesToAssertExist = new ArrayList<>();
-		ArrayList<Path> filesToOverwrite = new ArrayList<>();
-		ArrayList<Path> filesToCopyIfNotExist = new ArrayList<>();
-		ArrayList<Path> filesToAssertNotExist = new ArrayList<>();
-		ArrayList<Path> filesToIgnore = new ArrayList<>();
-		if (solutionArchive != null) {
+		switch (languageMode) {
+		case JAVA:
 			// Extract the Solution Project
 			extractFolder(solutionArchive.getAbsolutePath(), outputDir.getAbsolutePath());
 			if (!Stream.of(outputDir.listFiles()).anyMatch(x -> x.getName().endsWith("SOLUTION"))) {
@@ -105,88 +124,175 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			}
 			solutionFolder = Stream.of(outputDir.listFiles()).filter(x -> x.getName().endsWith("SOLUTION")).findFirst()
 					.get();
-			if (fileList != null) {
-				try {
-					String solPath = solutionFolder.getAbsolutePath();
-					BufferedReader fileListReader = new BufferedReader(new FileReader(fileList));
-					String currentLine;
-					int lineNumber = 0;
-					FileReadMode currentMode = FileReadMode.ASSERT_EXISTS;
-					// Read File Line By Line
-					while ((currentLine = fileListReader.readLine()) != null) {
-						lineNumber++;
-						// Comments
-						if (currentLine.startsWith("#"))
-							continue;
-						// Mode switcher
-						if (currentLine.startsWith("[")) {
-							if (!currentLine.endsWith("]")) {
-								System.err.println("Faulty FileList Line:" + lineNumber);
+			if (solutionArchive != null) {
+				if (fileList != null) {
+					// Read instruction Set
+					try {
+						if (fileList.getName().endsWith(".json")) {
+							// New Fancy format
+							Gson gson = new Gson();
+							instructionSet = gson.fromJson(Files.readString(fileList.toPath()),
+									JavaActionSetModel.class);
+							JavaActionSetModel javaInstructionSet = (JavaActionSetModel) instructionSet;
+							javaInstructionSet.convertToAbsolutePaths(solutionFolder);
+							System.out.println(
+									"Files to Assert exist: " + javaInstructionSet.getAssert_exists().toString());
+							System.out.println("Files to Assert not exist: "
+									+ javaInstructionSet.getAssert_not_exists().toString());
+							System.out.println(
+									"Files to overwrite: " + javaInstructionSet.getOverwrite_always().toString());
+							System.out.println("Files to ignore: " + javaInstructionSet.getIgnore().toString());
+						} else if (fileList.getName().endsWith(".txt")) {
+							// Legacy Java Support
+							if (languageMode != LanguageMode.JAVA) {
+								throw new Error(
+										"Only Java has legacy instruction Set support. Please use the new .json Format");
 							}
-							switch (currentLine.toLowerCase()) { // Case insensitive matching
-							case "[assert_exists]":
-								currentMode = FileReadMode.ASSERT_EXISTS;
-								continue;
-							case "[overwrite_always]":
-								currentMode = FileReadMode.OVERWRITE_ALWAYS;
-								continue;
-							case "[copy_if_not_exists]":
-								currentMode = FileReadMode.COPY_IF_NOT_EXISTS;
-								continue;
-							case "[assert_not_exists]":
-								currentMode = FileReadMode.ASSERT_NOT_EXISTS;
-								continue;
-							case "[ignore]":
-								currentMode = FileReadMode.IGNORE;
-								continue;
-							default:
-								System.err.println("Unknown File Read Mode: " + currentLine);
-								continue;
+							String solPath = solutionFolder.getAbsolutePath();
+							ArrayList<Path> filesToAssertExist = new ArrayList<>();
+							ArrayList<Path> filesToOverwrite = new ArrayList<>();
+							ArrayList<Path> filesToCopyIfNotExist = new ArrayList<>();
+							ArrayList<Path> filesToAssertNotExist = new ArrayList<>();
+							ArrayList<Path> filesToIgnore = new ArrayList<>();
+							BufferedReader fileListReader = new BufferedReader(new FileReader(fileList));
+							String currentLine;
+							int lineNumber = 0;
+							FileReadMode currentMode = FileReadMode.ASSERT_EXISTS;
+							// Read File Line By Line
+							while ((currentLine = fileListReader.readLine()) != null) {
+								lineNumber++;
+								// Comments
+								if (currentLine.startsWith("#"))
+									continue;
+								// Mode switcher
+								if (currentLine.startsWith("[")) {
+									if (!currentLine.endsWith("]")) {
+										System.err.println("Faulty FileList Line:" + lineNumber);
+									}
+									switch (currentLine.toLowerCase()) { // Case insensitive matching
+									case "[assert_exists]":
+										currentMode = FileReadMode.ASSERT_EXISTS;
+										continue;
+									case "[overwrite_always]":
+										currentMode = FileReadMode.OVERWRITE_ALWAYS;
+										continue;
+									case "[copy_if_not_exists]":
+										currentMode = FileReadMode.COPY_IF_NOT_EXISTS;
+										continue;
+									case "[assert_not_exists]":
+										currentMode = FileReadMode.ASSERT_NOT_EXISTS;
+										continue;
+									case "[ignore]":
+										currentMode = FileReadMode.IGNORE;
+										continue;
+									default:
+										System.err.println("Unknown File Read Mode: " + currentLine);
+										continue;
+									}
+								}
+								// Reading
+								switch (currentMode) {
+								case ASSERT_EXISTS:
+									filesToAssertExist.add(Paths.get(solPath, currentLine));
+									break;
+								case ASSERT_NOT_EXISTS:
+									filesToAssertNotExist.add(Paths.get(solPath, currentLine));
+									break;
+								case OVERWRITE_ALWAYS:
+									filesToOverwrite.add(Paths.get(solPath, currentLine));
+									break;
+								case COPY_IF_NOT_EXISTS:
+									filesToCopyIfNotExist.add(Paths.get(solPath, currentLine));
+									break;
+								case IGNORE:
+									filesToIgnore.add(Paths.get(solPath, currentLine));
+									break;
+								default:
+									break;
+								}
 							}
-						}
-						// Reading
-						switch (currentMode) {
-						case ASSERT_EXISTS:
-							filesToAssertExist.add(Paths.get(solPath, currentLine));
-							break;
-						case ASSERT_NOT_EXISTS:
-							filesToAssertNotExist.add(Paths.get(solPath, currentLine));
-							break;
-						case OVERWRITE_ALWAYS:
-							filesToOverwrite.add(Paths.get(solPath, currentLine));
-							break;
-						case COPY_IF_NOT_EXISTS:
-							filesToCopyIfNotExist.add(Paths.get(solPath, currentLine));
-							break;
-						case IGNORE:
-							filesToIgnore.add(Paths.get(solPath, currentLine));
-							break;
-						default:
-							break;
-						}
-					}
-					System.out.println("Files to Assert exist: " + filesToAssertExist.toString());
-					System.out.println("Files to Assert not exist: " + filesToAssertNotExist.toString());
-					System.out.println("Files to overwrite: " + filesToOverwrite.toString());
-					System.out.println("Files to ignore: " + filesToIgnore.toString());
+							instructionSet = new JavaActionSetModel();
+							JavaActionSetModel javaInstructionSet = (JavaActionSetModel) instructionSet;
+							javaInstructionSet.setAssert_exists(filesToAssertExist);
+							javaInstructionSet.setAssert_not_exists(filesToAssertNotExist);
+							javaInstructionSet.setOverwrite_always(filesToOverwrite);
+							javaInstructionSet.setIgnore(filesToIgnore);
+							System.out.println("Files to Assert exist: " + filesToAssertExist.toString());
+							System.out.println("Files to Assert not exist: " + filesToAssertNotExist.toString());
+							System.out.println("Files to overwrite: " + filesToOverwrite.toString());
+							System.out.println("Files to ignore: " + filesToIgnore.toString());
 
-					// Close the input stream
-					fileListReader.close();
-					// filesToEvaluate = (ArrayList<Path>) Files.lines(fileList.toPath()).filter(x
-					// -> !x.startsWith("#"))
-					// .map(x -> Paths.get(solPath,
-					// x).toAbsolutePath()).collect(Collectors.toList());
-				} catch (Exception e) {
-					err.print(e.getMessage());
-					fileList = null;
+							// Close the input stream
+							fileListReader.close();
+							// filesToEvaluate = (ArrayList<Path>) Files.lines(fileList.toPath()).filter(x
+							// -> !x.startsWith("#"))
+							// .map(x -> Paths.get(solPath,
+							// x).toAbsolutePath()).collect(Collectors.toList());
+
+						} else {
+							throw new Error("File List format invalid");
+						}
+
+					} catch (Exception e) {
+						err.print(e.getMessage());
+						// e.printStackTrace();
+						fileList = null;
+					}
 				}
 			}
+			break;
+
+		case RACKET:
+			try {
+				solutionFolder = Files
+						.copy(solutionArchive.toPath().toAbsolutePath(),
+								Paths.get(outputDir.toPath().toAbsolutePath().toString(), solutionArchive.getName()))
+						.toFile();
+				if (fileList != null) {
+					// Read instruction Set
+					try {
+						if (fileList.getName().endsWith(".json")) {
+							// New Fancy format
+							Gson gson = new Gson();
+							instructionSet = gson.fromJson(Files.readString(fileList.toPath()),
+									RacketActionSetModel.class);
+							RacketActionSetModel racketInstructionSet = (RacketActionSetModel) instructionSet;
+							System.out.println("Extraction Settings:");
+							System.out.println(
+									"- Should remove student tests:" + racketInstructionSet.isRemove_student_tests());
+							System.out.println("- Should fix naming convention:"
+									+ racketInstructionSet.shouldFix_naming_convention());
+							System.out.println("- Should do tests:" + racketInstructionSet.isDo_tests());
+						} else {
+							throw new Error("✗ File List format invalid");
+						}
+
+					} catch (Exception e) {
+						err.print(e.getMessage());
+						// e.printStackTrace();
+						fileList = null;
+					}
+				}
+			} catch (IOException e1) {
+				System.err.println("✗ Unable to copy soluition to target: " + e1.getMessage());
+				// e1.printStackTrace();
+				return;
+			}
+			raco = new RacoAdapter(outputDir);
+			raco.verify();
 		}
+
 		// Extract The individual submissions
 		int fileCount = 0;
 		int successfullCount = 0;
 		var submissions = tempAllSubsFolder.listFiles();
-		if(pb != null) {
+		if (!verifyDownloadArchiveStructure(submissions)) {
+			err.println("✗ Die Option \"Als Verzeichnis Herunterladen\" wurde nicht verwendet. Breche ab");
+			return;
+		} else {
+			System.out.println("✓ Ordnerstruktur verifiziert");
+		}
+		if (pb != null) {
 			pb.setMinimum(0);
 			pb.setMaximum(submissions.length);
 			pb.setValue(0);
@@ -194,138 +300,26 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			pb.setEnabled(true);
 		}
 		log.println("Extracting Projects...");
+
+		// -- Individual submissions --\\
 		for (File submission : submissions) {
 			fileCount++;
-			if (!submission.isDirectory() || submission.listFiles().length != 1) {
-				err.println("Cannot Extract submission " + submission.getName()
-						+ " (maybe you didn't download compressed submissions?)");
-				moveFolderContent(submission, faultyDir);
-				continue;
-			}
-			String submittorName = submission.getName().split("_")[0];
-			log.println("Extracting Submission from " + submittorName);
-			// Extract current Submission to tempCurrentSubFolder
-			File submissionZip = submission.listFiles()[0];
-			if (!submissionZip.getName().endsWith(".zip")) {
-				err.println("Cannot Extract submission " + submission.getName()
-						+ " (Not a Zip, maybe you didn't download compressed submissions?)");
-				moveFolderContent(submission, faultyDir);
-				continue;
-			}
-			// Naming convention check 1 (now unnecessarty)
-			/*
-			 * if(!submissionZip.getName().matches(
-			 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.zip")) {
-			 * log.
-			 * println("Namenskonvention leicht verletzt, KEIN PUNKTABZUG(abgabearchiv): " +
-			 * submission.getName()); moveFolderContent(submission, faultyDir); continue; }
-			 */
-			clearFolder(tempCurrentSubFolder);
-			extractFolder(submissionZip.getAbsolutePath(), tempCurrentSubFolder.getAbsolutePath());
-			// Naming convention check 2
-			if (tempCurrentSubFolder.listFiles().length == 0) {
-				err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
-				moveFolderContent(submission, faultyDir);
-				continue;
-			}
-			if (Stream.of(tempCurrentSubFolder.listFiles())
-					.anyMatch(x -> x.isDirectory() && x.getName().equals("__MACOSX"))) {
-				System.out.println("removing __MACOSX folder");
-				File macosxFolder = Stream.of(tempCurrentSubFolder.listFiles())
-						.filter(x -> x.isDirectory() && x.getName().equals("__MACOSX")).findFirst().get();
-				clearFolder(macosxFolder);
-				if (macosxFolder.delete()) {
-					// System.out.println("Removed" + " __MACOSX-Folder");
-				} else {
-					System.out.println("Cannot remove" + " __MACOSX-Folder");
+			switch (languageMode) {
+			case JAVA:
+				if (processJavaSubmission(submission, faultyDir, tempCurrentSubFolder, solutionFolder)) {
 				}
-			}
-			File submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
-			/*
-			 * Unnecessary if (!submissionProjectFolder.getName().matches(
-			 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
-			 * err.println("Namenskonvention verletzt in " + submission.getName() + ": " +
-			 * submissionProjectFolder.getName()); moveFolderContent(submission, faultyDir);
-			 * continue; }
-			 */
-			// Final Naming Convention Check and compatibility check
-			boolean hadProjectFile = true;
-			if (!Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals(".project"))) {
-				err.println("keine .project Datei bei " + submittorName);
-				try {
-					// Copy .project from Solution
-					if (solutionArchive != null) {
-						err.println("Kopiere .project Datei von Musterlösung");
-						Files.copy(Paths.get(solutionFolder.getAbsolutePath(), ".project"),
-								Paths.get(submissionProjectFolder.getAbsolutePath(), ".project"),
-								StandardCopyOption.REPLACE_EXISTING);
-					} else {
-						moveFolderContent(submission, faultyDir);
-						continue;
-					}
-				} catch (IOException e) {
-					err.println("Error during .project copy: " + e.getMessage());
-					continue;
-				}
-				hadProjectFile = false;
-			}
-			File projectFile = Paths.get(submissionProjectFolder.getAbsolutePath(), ".project").toFile();
-			DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-			DocumentBuilder documentBuilder;
-			Document document;
-			try {
-				documentBuilder = documentBuilderFactory.newDocumentBuilder();
-				document = documentBuilder.parse(projectFile);
-				var projectName = document.getElementsByTagName("name").item(0);
-				if (!projectName.getTextContent()
-						.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
-					if (hadProjectFile) {
-						err.println(
-								"Namenskonvention verletzt bei " + submittorName + ": " + projectName.getTextContent());
-					} else {
-						err.println("passe Namenskonvention für " + submittorName + " an...");
-					}
-					// Get correct project name
-					String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
-							.replace("ü", "ue").replace("ß", "ss");
-					String hausuebungsprefix = solutionFolder == null ? "HXX_"
-							: solutionFolder.getName().split("_")[0] + "_";
-					err.println("Projekt nach " + hausuebungsprefix + newProjectName + " umbenannt");
-					projectName.setTextContent(hausuebungsprefix + newProjectName);
-					// Overwrite .project File
-					// 4- Save the result to a new XML doc
-					Transformer xformer = TransformerFactory.newInstance().newTransformer();
-					xformer.transform(new DOMSource(document), new StreamResult(projectFile));
+				break;
+			case RACKET:
 
+				if (processRacketSubmission(submission, faultyDir, tempCurrentSubFolder, solutionFolder)) {
+					successfullCount++;
 				}
-				if (fileList != null && filesToAssertExist != null) {
-					mergeProjectContent(solutionFolder, submissionProjectFolder, filesToAssertExist,
-							filesToAssertNotExist, filesToOverwrite, filesToCopyIfNotExist, filesToIgnore);
-				}
-			} catch (Exception e) {
-				err.println(e.getMessage());
+				break;
 			}
-			// Project is ready to import, make sure foldername doesn't exist already
-			if (Stream.of(outputDir.listFiles())
-					.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
-				err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
-						+ submissionProjectFolder.getName() + "(1)");
-				File newProjectFolder = Paths
-						.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(1)")
-						.toFile();
-				if (!submissionProjectFolder.renameTo(newProjectFolder)) {
-					err.println("Could not rename, moving to faulty");
-					moveFolderContent(tempCurrentSubFolder, faultyDir);
-					continue;
-				}
-			}
-			moveFolderContent(tempCurrentSubFolder, outputDir);
-			successfullCount++;
-			if(pb != null) {
+			if (pb != null) {
 				pb.setValue(fileCount);
 				pb.setString(String.format("%s/%s Abgaben fertig", pb.getValue(), pb.getMaximum()));
 			}
-			continue;
 		}
 		log.println("Cleanup...");
 		removeFolders(tempCurrentSubFolder, tempAllSubsFolder);
@@ -335,82 +329,15 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	}
 
 	/**
-	 * Extracts all the contents of a ZIP-Archive
+	 * Schaut ob die obtion "in Verzeichnis herunterladen" verwendet wurde
 	 * 
-	 * @param zipFile       the ZIP-Archive
-	 * @param extractFolder the destination directory
+	 * @param submissions the files from the directory (only on the top layer, no
+	 *                    recursive file list)
+	 * @return true if the structure Matches
 	 */
-	private void extractFolder(String zipFile, String extractFolder) {
-		try {
-			int BUFFER = 2048;
-			File file = new File(zipFile);
-
-			ZipFile zip = new ZipFile(file);
-			String newPath = extractFolder;
-
-			new File(newPath).mkdir();
-			var zipFileEntries = zip.entries();
-
-			// Process each entry
-			while (zipFileEntries.hasMoreElements()) {
-				// grab a zip file entry
-				ZipEntry entry = (ZipEntry) zipFileEntries.nextElement();
-				String currentEntry = entry.getName();
-
-				File destFile = new File(newPath, currentEntry);
-				// destFile = new File(newPath, destFile.getName());
-				File destinationParent = destFile.getParentFile();
-
-				// create the parent directory structure if needed
-				destinationParent.mkdirs();
-
-				if (!entry.isDirectory()) {
-					BufferedInputStream is = new BufferedInputStream(zip.getInputStream(entry));
-					int currentByte;
-					// establish buffer for writing file
-					byte data[] = new byte[BUFFER];
-
-					// write the current file to disk
-					FileOutputStream fos = new FileOutputStream(destFile);
-					BufferedOutputStream dest = new BufferedOutputStream(fos, BUFFER);
-
-					// read and write until last byte is encountered
-					while ((currentByte = is.read(data, 0, BUFFER)) != -1) {
-						dest.write(data, 0, currentByte);
-					}
-					dest.flush();
-					dest.close();
-					is.close();
-				}
-
-			}
-			zip.close();
-		} catch (Exception e) {
-			err.println("ERROR: " + e.getMessage());
-		}
-
-	}
-
-	/**
-	 * Ensures a Folder is empty, prompts a dialog asking to clear it if not empty
-	 * 
-	 * @param directory the folder to ensure is empty
-	 * @param whitelist a List of files that are allowed in the folder
-	 * @return true if the folder is empty now, false if not
-	 */
-	private boolean EnsureEmpty(File directory, String... whitelist) {
-		if (!directory.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
-		}
-		for (final File f : directory.listFiles()) {
-			if (!Arrays.stream(whitelist).anyMatch(x -> x == f.getName())) {
-				if (JOptionPane.showConfirmDialog(null, "The directory " + directory.getAbsolutePath()
-						+ " contains Files but must be empty inorder to proceed.\n Do you want to clear the folder?",
-						"Warning", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-					log.println("Clearing Folder " + directory.getAbsolutePath());
-					clearFolder(directory);
-					return true;
-				}
+	private static boolean verifyDownloadArchiveStructure(File[] submissions) {
+		for (File f : submissions) {
+			if (!f.isDirectory() || !f.getName().endsWith("_assignsubmission_file_")) {
 				return false;
 			}
 		}
@@ -418,32 +345,292 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	}
 
 	/**
-	 * remove all the Contents of a given Folder
+	 * Process a single Submission File
 	 * 
-	 * @param folder the folder to clear
+	 * @param submission           the Submission File (Zip or .rkt)
+	 * @param faultyDir            the directory to move if faulty
+	 * @param tempCurrentSubFolder the folder to extraxt the current submission to
+	 *                             isolated
+	 * @param solutionFolder       the solution folder or file
+	 * @return true if processed sucessfully
 	 */
-	private void clearFolder(File folder) {
-		if (!folder.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
+	private boolean processJavaSubmission(File submission, File faultyDir, File tempCurrentSubFolder,
+			File solutionFolder) {
+		if (!submission.isDirectory() || submission.listFiles().length != 1) {
+			err.println("Cannot Extract submission " + submission.getName()
+					+ " (maybe you didn't choose the correct Language mode?)");
+			moveFolderContent(submission, faultyDir);
+			return false;
 		}
-		for (File file : folder.listFiles()) {
-			if (file.isDirectory())
-				clearFolder(file);
-			file.delete();
+		String submittorName = submission.getName().split("_")[0];
+		log.println("Extracting Submission from " + submittorName);
+		// Extract current Submission to tempCurrentSubFolder
+		File submissionZip = submission.listFiles()[0];
+		if (!submissionZip.getName().endsWith(".zip")) {
+			err.println("Cannot Extract submission " + submission.getName()
+					+ " (Not a Zip, maybe you didn't download compressed submissions?)");
+			moveFolderContent(submission, faultyDir);
+			return false;
 		}
+		// Naming convention check 1 (now unnecessarty)
+		/*
+		 * if(!submissionZip.getName().matches(
+		 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.zip")) {
+		 * log.
+		 * println("Namenskonvention leicht verletzt, KEIN PUNKTABZUG(abgabearchiv): " +
+		 * submission.getName()); moveFolderContent(submission, faultyDir); continue; }
+		 */
+		clearFolder(tempCurrentSubFolder);
+		extractFolder(submissionZip.getAbsolutePath(), tempCurrentSubFolder.getAbsolutePath());
+		// Naming convention check 2
+		if (tempCurrentSubFolder.listFiles().length == 0) {
+			err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
+			moveFolderContent(submission, faultyDir);
+			return false;
+		}
+		if (Stream.of(tempCurrentSubFolder.listFiles())
+				.anyMatch(x -> x.isDirectory() && x.getName().equals("__MACOSX"))) {
+			System.out.println("removing __MACOSX folder");
+			File macosxFolder = Stream.of(tempCurrentSubFolder.listFiles())
+					.filter(x -> x.isDirectory() && x.getName().equals("__MACOSX")).findFirst().get();
+			clearFolder(macosxFolder);
+			if (macosxFolder.delete()) {
+				// System.out.println("Removed" + " __MACOSX-Folder");
+			} else {
+				System.out.println("Cannot remove" + " __MACOSX-Folder");
+			}
+		}
+		File submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
+		/*
+		 * Unnecessary if (!submissionProjectFolder.getName().matches(
+		 * "H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
+		 * err.println("Namenskonvention verletzt in " + submission.getName() + ": " +
+		 * submissionProjectFolder.getName()); moveFolderContent(submission, faultyDir);
+		 * continue; }
+		 */
+		checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder, faultyDir);
+		// Project is ready to import, make sure foldername doesn't exist already
+		if (Stream.of(outputDir.listFiles())
+				.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
+			err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
+					+ submissionProjectFolder.getName() + "(1)");
+			File newProjectFolder = Paths
+					.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(1)").toFile();
+			if (!submissionProjectFolder.renameTo(newProjectFolder)) {
+				err.println("Could not rename, moving to faulty");
+				moveFolderContent(tempCurrentSubFolder, faultyDir);
+				return false;
+			}
+		}
+		moveFolderContent(tempCurrentSubFolder, outputDir);
+		return true;
 	}
 
 	/**
-	 * remove given Folder(s) and their contents
+	 * Process a single Submission File
 	 * 
-	 * @param folder the folders to remove
+	 * @param submission           the Submission Directory (containing a .rkt file)
+	 * @param faultyDir            the directory to move if faulty
+	 * @param tempCurrentSubFolder the folder to extraxt the current submission to
+	 *                             isolated
+	 * @param solutionFolder       the solution file
+	 * @return true if processed sucessfully
 	 */
-	private void removeFolders(File... folder) {
-		for (File f : folder) {
-			clearFolder(f);
-			// The directory is now empty so we delete it
-			f.delete();
+	private boolean processRacketSubmission(File submission, File faultyDir, File tempCurrentSubFolder,
+			File solutionFile) {
+		if (!submission.isDirectory()) {
+			err.println("Cannot Extract submission " + submission.getName()
+					+ " (maybe you didn't choose the correct Language mode?)");
+			moveFolderContent(submission, faultyDir);
+			return false;
 		}
+		String submittorName = submission.getName().split("_")[0];
+		RacketActionSetModel racketInstructionSet = (RacketActionSetModel) instructionSet;
+		if (racketInstructionSet.isDo_tests()) {
+			log.println("------------------------------------");
+			log.println("Submission from: " + submittorName);
+			log.println("------------------------------------");
+
+		} else {
+			log.println("Extracting Submission from: " + submittorName);
+		}
+		// Move current Submission to tempCurrentSubFolder
+		clearFolder(tempCurrentSubFolder);
+		copyFolderContent(submission, tempCurrentSubFolder);
+		// Naming convention check 2
+		if (tempCurrentSubFolder.listFiles().length == 0) {
+			err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
+			System.err.println("Moving to faultyDir...");
+			moveFolderContent(tempCurrentSubFolder, faultyDir);
+			return false;
+		}
+		Path submissionProjectFile = tempCurrentSubFolder.listFiles()[0].toPath().toAbsolutePath();
+		String submissionContent = "";
+		try {
+			submissionContent = Files.readString(submissionProjectFile);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		// Convert WXME-Submissions
+		if (submissionContent.contains("#|\n" + "   This file uses the GRacket editor format.\n"
+				+ "   Open this file in DrRacket version 7.9 or later to read it.\n" + "\n"
+				+ "   Most likely, it was created by saving a program in DrRacket,\n"
+				+ "   and it probably contains a program with non-text elements\n"
+				+ "   (such as images or comment boxes).\n" + "\n" + "            http://racket-lang.org/\n" + "|#")) {
+			submissionProjectFile = raco.convertWxmeSubmission(submissionProjectFile.toFile()).toPath();
+			try {
+				submissionContent = Files.readString(submissionProjectFile);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		// Testing Phase
+		String projectName = submissionProjectFile.toFile().getName();
+		if (racketInstructionSet.shouldCheck_naming_convention()
+				&& !checkRacketNamingConvention(submissionProjectFile.toFile().getName(), submissionContent,
+						submittorName)) {
+			System.err.println("Moving to faultyDir...");
+			moveFolderContent(submission, faultyDir);
+			return false;
+		}
+		if (racketInstructionSet.isDo_tests()) {
+			System.err.println("Automated testing is planned but not yet implemented.");
+		}
+		// Project is ready to import, make sure fileName doesn't exist already
+		Path finalProjectPath = submissionProjectFile.toAbsolutePath();
+		if (Stream.of(outputDir.listFiles()).anyMatch(x -> !x.isDirectory() && x.getName().equals(projectName))) {
+			err.println("Project File  named " + submissionProjectFile.toFile().getName()
+					+ " already exists. renaming to: " + projectName + "(1)");
+			File newProjectFile = Paths.get(tempCurrentSubFolder.getAbsolutePath(), projectName + "(1)").toFile();
+			if (!submissionProjectFile.toFile().renameTo(newProjectFile)) {
+				err.println("Could not rename, moving to faulty");
+				System.err.println("Moving to faultyDir...");
+				moveFolderContent(submission, faultyDir);
+				return false;
+			}
+			finalProjectPath = newProjectFile.toPath().toAbsolutePath();
+		}
+		// Move Project to main Target dir
+		try {
+			Files.move(finalProjectPath, outputDir.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			return true;
+		} catch (IOException e) {
+			System.out.println("Could not move the fixed Project to target directory");
+			System.err.println(e.getMessage());
+			moveFolderContent(tempCurrentSubFolder, faultyDir);
+			return false;
+		}
+	}
+
+	private boolean checkRacketNamingConvention(String fileName, String fileContent, String submittorName) {
+		// Filename
+		if (languageMode != LanguageMode.RACKET) {
+			err.println("Method checkRacketNamingConvention() was called in non-racket-Mode");
+			return false;
+		}
+		RacketActionSetModel racketInstructionSet = (RacketActionSetModel) instructionSet;
+		if (!fileName.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.rkt")) {
+			err.println("Namenskonvention verletzt bei " + submittorName + ": " + fileName);
+			if (racketInstructionSet.shouldFix_naming_convention()) {
+				// Get correct project name
+				String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
+						.replace("ü", "ue").replace("ß", "ss");
+				String hausuebungsprefix = "H" + racketInstructionSet.getSheet_number();
+				err.println("Projekt nach " + hausuebungsprefix + newProjectName + " umbenannt");
+			} else {
+				return false;
+			}
+		}
+		ArrayList<String> check_contained = racketInstructionSet.getVerify_strings_contained();
+		if (check_contained != null && !check_contained.isEmpty()) {
+			for (String contains : check_contained) {
+				if (!fileContent.contains(contains)) {
+					System.err.println("Submission from " + submittorName + " does not contain the following keyword: "
+							+ contains);
+					return false;
+				}
+			}
+		}
+		ArrayList<String> check__not_contained = racketInstructionSet.getVerify_strings_not_contained();
+		if (check__not_contained != null && !check__not_contained.isEmpty()) {
+			for (String contains : check__not_contained) {
+				if (fileContent.contains(contains)) {
+					System.err.println("Submission from " + submittorName
+							+ " contains the following forbidden keyword: " + contains);
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	private boolean checkRacketNamingConvention(File rktFile, String SubmittorName) throws IOException {
+		return checkRacketNamingConvention(rktFile.getName(), SubmittorName, Files.readString(rktFile.toPath()));
+	}
+
+	private boolean checkJavaNamingConvention(File extractedSubmissionFileOrFolder, File submissionProjectFolder,
+			String submittorName, File solutionFolder, File faultyDir) {
+		// Final Naming Convention Check and compatibility check
+		boolean hadProjectFile = true;
+		if (!Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals(".project"))) {
+			err.println("keine .project Datei bei " + submittorName);
+			try {
+				// Copy .project from Solution
+				if (solutionArchive != null) {
+					err.println("Kopiere .project Datei von Musterlösung");
+					Files.copy(Paths.get(solutionFolder.getAbsolutePath(), ".project"),
+							Paths.get(submissionProjectFolder.getAbsolutePath(), ".project"),
+							StandardCopyOption.REPLACE_EXISTING);
+				} else {
+					moveFolderContent(extractedSubmissionFileOrFolder, faultyDir);
+					return false;
+				}
+			} catch (IOException e) {
+				err.println("Error during .project copy: " + e.getMessage());
+				return false;
+			}
+			hadProjectFile = false;
+		}
+		File projectFile = Paths.get(submissionProjectFolder.getAbsolutePath(), ".project").toFile();
+		DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+		DocumentBuilder documentBuilder;
+		Document document;
+		try {
+			documentBuilder = documentBuilderFactory.newDocumentBuilder();
+			document = documentBuilder.parse(projectFile);
+			var projectName = document.getElementsByTagName("name").item(0);
+			if (!projectName.getTextContent()
+					.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
+				if (hadProjectFile) {
+					err.println("Namenskonvention verletzt bei " + submittorName + ": " + projectName.getTextContent());
+				} else {
+					err.println("passe Namenskonvention für " + submittorName + " an...");
+				}
+				// Get correct project name
+				String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
+						.replace("ü", "ue").replace("ß", "ss");
+				String hausuebungsprefix = solutionFolder == null ? "HXX_"
+						: solutionFolder.getName().split("_")[0] + "_";
+				err.println("Projekt nach " + hausuebungsprefix + newProjectName + " umbenannt");
+				projectName.setTextContent(hausuebungsprefix + newProjectName);
+				// Overwrite .project File
+				// 4- Save the result to a new XML doc
+				Transformer xformer = TransformerFactory.newInstance().newTransformer();
+				xformer.transform(new DOMSource(document), new StreamResult(projectFile));
+
+			}
+			JavaActionSetModel javaInstructionSet = (JavaActionSetModel) instructionSet;
+			if (instructionSet != null && !javaInstructionSet.getAssert_exists().isEmpty()) {
+				mergeProjectContent(solutionFolder, submissionProjectFolder, javaInstructionSet.getAssert_exists(),
+						javaInstructionSet.getAssert_not_exists(), javaInstructionSet.getOverwrite_always(),
+						javaInstructionSet.getCopy_if_not_exists(), javaInstructionSet.getIgnore());
+			}
+		} catch (Exception e) {
+			err.println(e.getMessage());
+		}
+		return true;
 	}
 
 	/**
@@ -543,107 +730,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		}
 	}
 
-	/**
-	 * Compares the content of two files
-	 * 
-	 * @param f1 the first file
-	 * @param f2 the second file
-	 * @return true if contents equal
-	 * @throws FileNotFoundException
-	 */
-	public static boolean filesEqual(File f1, File f2) throws FileNotFoundException {
-		Scanner input1 = new Scanner(f1);// read first file
-		Scanner input2 = new Scanner(f2);// read second file
-
-		while (input1.hasNextLine() && input2.hasNextLine()) {
-			var first = input1.nextLine();
-			var second = input2.nextLine();
-
-			if (!first.equals(second)) {
-				System.out.println("Differences found: " + "\n" + first + '\n' + second);
-				input1.close();
-				input2.close();
-				return false;
-			}
-		}
-		input1.close();
-		input2.close();
-		return true;
-	}
-
-	/**
-	 * Copy the contents of a Folder to a target folder
-	 * 
-	 * @param parentDir the source folder
-	 * @param targetDir the destination folder
-	 */
-	private void copyFolderContent(File parentDir, File targetDir) {
-		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
-		}
-		for (File file : parentDir.listFiles()) {
-			if (file.isDirectory()) {
-				copyFolderContent(file, ensureDirectories(targetDir, file.getName()).get(0));
-			} else {
-				try {
-					Files.copy(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()),
-							StandardCopyOption.REPLACE_EXISTING);
-				} catch (IOException e) {
-					err.println(e.getMessage());
-				}
-			}
-		}
-	}
-
-	/**
-	 * Move the content of a folder to a target folder recursively
-	 * 
-	 * @param parentDir the source folder
-	 * @param targetDir the destination folder
-	 */
-	private void moveFolderContent(File parentDir, File targetDir) {
-		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
-		}
-		for (File file : parentDir.listFiles()) {
-			if (file.isDirectory()) {
-				moveFolderContent(file, ensureDirectories(targetDir, file.getName()).get(0));
-				file.delete();
-			} else {
-				try {
-					Files.move(file.toPath(), Paths.get(targetDir.getAbsolutePath(), file.getName()),
-							StandardCopyOption.REPLACE_EXISTING);
-				} catch (IOException e) {
-					err.println(e.getMessage());
-				}
-			}
-		}
-	}
-
-	/**
-	 * Makes sure all the given directories exist inside the parent directory
-	 * 
-	 * @param parentDir  the Parent Direcory
-	 * @param folderName the Folder Names to ensure
-	 * @return the Created Folders
-	 */
-	private ArrayList<File> ensureDirectories(File parentDir, String... folderName) {
-		if (!parentDir.isDirectory()) {
-			throw new IllegalArgumentException("parentDir must be a directory");
-		}
-		ArrayList<File> createdDirs = new ArrayList<>();
-		for (String f : folderName) {
-			Path wantedFolder = Paths.get(parentDir.getAbsolutePath(), f);
-			if (Files.notExists(Paths.get(parentDir.getAbsolutePath(), f))) {
-				File newFolder = wantedFolder.toFile();
-				if (!newFolder.mkdirs()) {
-					err.println("Folder " + f + "could not be created");
-				}
-			}
-			createdDirs.add(wantedFolder.toFile());
-		}
-		return createdDirs;
-	}
+	// -- Swing Worker Stuff --\\
 
 	@Override
 	protected String doInBackground() throws Exception {
