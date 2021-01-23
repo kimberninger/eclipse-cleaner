@@ -307,6 +307,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			switch (languageMode) {
 			case JAVA:
 				if (processJavaSubmission(submission, faultyDir, tempCurrentSubFolder, solutionFolder)) {
+					successfullCount++;
 				}
 				break;
 			case RACKET:

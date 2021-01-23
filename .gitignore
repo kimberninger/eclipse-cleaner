@@ -4,7 +4,8 @@
 # Compiled class file
 *.class
 bin/
-
+build/
+.vscode/
 # Log file
 *.log
 
@@ -23,7 +24,7 @@ bin/
 *.tar.gz
 *.rar
 
-# but still ignore libaries to commit
+# but still allow libaries to commit
 !lib/*
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
