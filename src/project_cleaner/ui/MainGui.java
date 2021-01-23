@@ -135,7 +135,7 @@ public class MainGui extends javax.swing.JFrame {
 		settingsLabel = new javax.swing.JLabel();
 
 		setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-		setTitle("FOP-Kprrelturhelfer im Java-Modus");
+		setTitle("FOP-Korrekturhelfer im Java-Modus");
 		setBackground(new java.awt.Color(17, 25, 37));
 		setForeground(new java.awt.Color(17, 25, 37));
 		setMinimumSize(new java.awt.Dimension(700, 500));
