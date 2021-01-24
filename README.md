@@ -45,7 +45,8 @@ Falls die Fertige JAR-Datei nicht funktioniert, oder mann selbst die neuste Vers
 - Rechtsklick auf Projekt->Properties-> Resource->Text file encoding -> UTF-8 Wählen (falls nicht vorausgewählt)
 - Die Run Configuration von MainGui oder ProjectCleaner nutzen (machen aktuell fast das gleiche)
 ## Bekannte Fehler
-- Aktuell macht die Option Abgaben Entpacken noch nichts (ist immer an)
+- Einige Optionen des JavaActionSetModels werden noch nicht berücksichtigt
+- Racket Modus noch buggy
 
 ## Geplante Features
 - Racket Modus
