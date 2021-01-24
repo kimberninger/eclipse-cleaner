@@ -1,5 +1,11 @@
 package project_cleaner;
 
+/**
+ * Stores a range between two {@link Integer}s
+ * 
+ * @author Ruben Deisenroth
+ *
+ */
 public class Range {
 	private int start;
 	private int end;
@@ -46,10 +52,22 @@ public class Range {
 		return Math.abs(end - start);
 	}
 
+	/**
+	 * Returns true if an {@link Integer} lies between start and end
+	 * 
+	 * @param number the number to check
+	 * @return true if a number lies between start and end
+	 */
 	public boolean contains(int number) {
 		return (number >= start && number <= end);
 	}
 
+	/**
+	 * Returns true if another {@link Range} is contained by this range
+	 * 
+	 * @param range the other {@link Range}
+	 * @return true if another {@link Range} is contained by this range
+	 */
 	public boolean contains(Range range) {
 		return contains(range.start) && contains(range.end);
 	}

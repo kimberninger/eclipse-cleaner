@@ -12,20 +12,44 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * A fully Functional Adapter for Handling The Raco. It supports code execution,
+ * testing, converting from wxme, and some parsing line removing all Comments
+ * from a file
+ * 
+ * @author Ruben Deisenroth
+ *
+ */
 public class RacoAdapter {
 	private File raco;
 	private Path executionDirectory;
 	private String defaultTempFilename = "temp.rkt";
 
+	/**
+	 * Create a new {@link RacoAdapter}
+	 * 
+	 * @param raco               the raco {@link File}
+	 * @param executionDirectory the Execution Directory {@link Path}
+	 */
 	public RacoAdapter(File raco, Path executionDirectory) {
 		this.raco = raco;
 		this.setExecutionDirectory(executionDirectory);
 	}
 
+	/**
+	 * Create a new {@link RacoAdapter}
+	 * 
+	 * @param executionDirectory the Execution Directory {@link Path}
+	 */
 	public RacoAdapter(Path executionDirectory) {
 		this(findRaco(), executionDirectory);
 	}
 
+	/**
+	 * Create a new {@link RacoAdapter}
+	 * 
+	 * @param executionDirectory the Execution Directory {@link File}
+	 */
 	public RacoAdapter(File executionDirectory) {
 		this(findRaco(), executionDirectory.toPath().toAbsolutePath());
 	}
@@ -59,7 +83,7 @@ public class RacoAdapter {
 	}
 
 	/**
-	 * Verifies the loaded raco to be compatible with this racoAdapter
+	 * Verifies the loaded raco to be compatible with this {@link RacoAdapter}
 	 * 
 	 * @return true if the Raco is compatible
 	 */
@@ -157,6 +181,12 @@ public class RacoAdapter {
 		}
 	}
 
+	/**
+	 * Executes the raco test command on a given {@link File}
+	 * 
+	 * @param rktFile the Racket Code {@link File}
+	 * @return the {@link RacketTestResult}
+	 */
 	public RacketTestResult racoTest(File rktFile) {
 		CommandResult result = executeShellComand(raco.getAbsolutePath(), "test", "--quiet", rktFile.getAbsolutePath());
 		if (result.ok()) {
@@ -170,15 +200,36 @@ public class RacoAdapter {
 		return new RacketTestResult(result.getResultString(), false);
 	}
 
+	/**
+	 * Executes the raco test command on a given {@link String} in a given
+	 * {@link Path}
+	 * 
+	 * @param racketCode the Racket-Code-{@link String}
+	 * @param path       the execution {@link Path}
+	 * @return the {@link RacketTestResult}
+	 */
 	public RacketTestResult racoTest(String racketCode, Path path) {
 		File rktFile = FileUtils.createTextFile(path, racketCode);
 		return racoTest(rktFile);
 	}
 
+	/**
+	 * Invocation of {@link #racoTest(String, Path)} with
+	 * {@link #executionDirectory} and {@link #defaultTempFilename}
+	 * 
+	 * @param racketCode the Racket-Code-{@link String}
+	 * @return the {@link RacketTestResult}
+	 */
 	public RacketTestResult racoTest(String racketCode) {
 		return racoTest(racketCode, Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename));
 	}
 
+	/**
+	 * Converts a WXME Submission to a readable text file
+	 * 
+	 * @param wxmeFile the {@link File} to convert
+	 * @return the converted {@link File}
+	 */
 	public File convertWxmeSubmission(File wxmeFile) {
 		File WxmeConverter = FileUtils.createTextFile(
 				Paths.get(executionDirectory.toAbsolutePath().toString(), "convertWxme.rkt"),
