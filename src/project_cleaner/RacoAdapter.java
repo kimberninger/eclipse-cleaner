@@ -252,7 +252,7 @@ public class RacoAdapter {
 		Pattern multilineCommentStarterRegex = Pattern.compile("[ \\(\\)\\{\\}\\[\\],][#][|]");
 		Matcher multilineCommentStarterMatcher = multilineCommentStarterRegex.matcher(racketCodeWithComments);
 
-		Pattern multilineCommentStarterNoPrefixRegex = Pattern.compile("[#][|]");
+		Pattern multilineCommentStarterNoPrefixRegex = Pattern.compile("(?<![|])[#][|]");
 		Matcher multilineCommentStarterNoPrefixMatcher = multilineCommentStarterNoPrefixRegex
 				.matcher(racketCodeWithComments);
 
@@ -336,12 +336,12 @@ public class RacoAdapter {
 						multilineCommentDepth++;
 						multilineCommentStartIndex = mlcs;
 						for (int stli = 0, enli = 0; multilineCommentDepth != 0
-								&& !(stli >= mlcsInLine.size() && enli >= mlceInLine.size());) {
-							var sti = stli >= mlcsInLine.size() ? -1 : mlcsInLine.get(stli);
+								&& !(stli >= mlcsNoPrefixInLine.size() && enli >= mlceInLine.size());) {
+							var sti = stli >= mlcsNoPrefixInLine.size() ? -1 : mlcsNoPrefixInLine.get(stli);
 							var eni = enli >= mlceInLine.size() ? -1 : mlceInLine.get(enli);
-							while (sti <= mlcs && stli < mlcsInLine.size() - 1) {
+							while (sti <= mlcs && stli < mlcsNoPrefixInLine.size() - 1) {
 								stli++;
-								sti = mlcsInLine.get(stli);
+								sti = mlcsNoPrefixInLine.get(stli);
 							}
 							while (eni <= mlcs && enli < mlceInLine.size() - 1) {
 								enli++;
@@ -355,7 +355,7 @@ public class RacoAdapter {
 							boolean opening = false;
 							// Select left most opening or closing multilene Comment operand
 							if (sti < eni && sti > mlcs) {
-								if (stli < mlcsInLine.size()) {
+								if (stli < mlcsNoPrefixInLine.size()) {
 									currentIndex = sti;
 									stli++;
 									opening = true;
@@ -414,15 +414,15 @@ public class RacoAdapter {
 
 				// See if whole line is Still mlc
 				for (int stli = 0, enli = 0; multilineCommentDepth != 0
-						&& !(stli >= mlcsInLine.size() && enli >= mlceInLine.size());) {
-					var sti = stli >= mlcsInLine.size() ? -1 : mlcsInLine.get(stli);
+						&& !(stli >= mlcsNoPrefixInLine.size() && enli >= mlceInLine.size());) {
+					var sti = stli >= mlcsNoPrefixInLine.size() ? -1 : mlcsNoPrefixInLine.get(stli);
 					var eni = enli >= mlceInLine.size() ? -1 : mlceInLine.get(enli);
 
 					int currentIndex; // The openand currently processed
 					boolean opening = false;
 					// Select left most opening or closing multilene Comment operand
 					if (sti < eni) {
-						if (stli < mlcsInLine.size()) {
+						if (stli < mlcsNoPrefixInLine.size()) {
 							currentIndex = sti;
 							stli++;
 							opening = true;
@@ -473,13 +473,13 @@ public class RacoAdapter {
 							multilineCommentDepth++;
 							multilineCommentStartIndex = mlcs;
 							for (int stli = 0, enli = 0; multilineCommentDepth != 0
-									&& !(stli >= mlcsInLine.size() && enli >= mlceInLine.size());) {
-								var sti = stli >= mlcsInLine.size() ? -1 : mlcsInLine.get(stli);
+									&& !(stli >= mlcsNoPrefixInLine.size() && enli >= mlceInLine.size());) {
+								var sti = stli >= mlcsNoPrefixInLine.size() ? -1 : mlcsNoPrefixInLine.get(stli);
 								var eni = enli >= mlceInLine.size() ? -1 : mlceInLine.get(enli);
 
-								while (sti <= mlcs && stli < mlcsInLine.size() - 1) {
+								while (sti <= mlcs && stli < mlcsNoPrefixInLine.size() - 1) {
 									stli++;
-									sti = mlcsInLine.get(stli);
+									sti = mlcsNoPrefixInLine.get(stli);
 								}
 								while (eni <= mlcs && enli < mlceInLine.size() - 1) {
 									enli++;
@@ -493,7 +493,7 @@ public class RacoAdapter {
 								boolean opening = false;
 								// Select left most opening or closing multilene Comment operand
 								if (sti < eni && sti > mlcs) {
-									if (stli < mlcsInLine.size()) {
+									if (stli < mlcsNoPrefixInLine.size()) {
 										currentIndex = sti;
 										stli++;
 										opening = true;
