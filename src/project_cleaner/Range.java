@@ -49,4 +49,8 @@ public class Range {
 	public boolean contains(int number) {
 		return (number >= start && number <= end);
 	}
+
+	public boolean contains(Range range) {
+		return contains(range.start) && contains(range.end);
+	}
 }

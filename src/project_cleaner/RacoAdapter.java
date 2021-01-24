@@ -243,8 +243,11 @@ public class RacoAdapter {
 		StringBuilder newCode = new StringBuilder();
 		System.out.println("Removing Comments");
 		// This regex took forever to make:
-		Pattern stringRegex = Pattern.compile("(?<!\\\\)(?:\\\\\\\\)*\"(\\\\.|[^\"])*(?<!\\\\)(?:\\\\\\\\)*\"");
-		Matcher stringMatcher = stringRegex.matcher(racketCodeWithComments);
+
+//		Pattern stringRegex = Pattern.compile("(?<!\\\\)(?:\\\\\\\\)*\"(\\\\.|[^\"])*(?<!\\\\)(?:\\\\\\\\)*\"");
+//		Matcher stringMatcher = stringRegex.matcher(racketCodeWithComments);
+		Pattern quotationMarkRegex = Pattern.compile("(?<!\\\\)(?:[\\\\]{2})*\"");
+		Matcher quotationMarkMatcher = quotationMarkRegex.matcher(racketCodeWithComments);
 		// THis one did not
 		Pattern semicolonRegex = Pattern.compile("(?<![\\\\])(?:\\\\\\\\)*;");
 		Matcher semicolonMatcher = semicolonRegex.matcher(racketCodeWithComments);
@@ -258,7 +261,12 @@ public class RacoAdapter {
 
 		Pattern multilineCommentEnderRegex = Pattern.compile("[|][#]");
 		Matcher multilineCommentEnderMatcher = multilineCommentEnderRegex.matcher(racketCodeWithComments);
-		var stringMatcherResults = stringMatcher.results().collect(Collectors.toList());
+
+//		var stringMatcherResults = stringMatcher.results().collect(Collectors.toList());
+		var quotationMarkMatcherResults = quotationMarkMatcher.results().collect(Collectors.toList());
+//		printMatchList(quotationMarkMatcherResults, "quotationMarkMatcherResults: ");
+		List<MatchResult> ignoreRanges = new ArrayList<>();
+		List<Range> quoteRanges = getQuoteRanges(quotationMarkMatcherResults, ignoreRanges);
 		var semikolonMatcherResults = semicolonMatcher.results().collect(Collectors.toList());
 		var multilineCommentStarterMatcherResults = multilineCommentStarterMatcher.results()
 				.collect(Collectors.toList());
@@ -271,21 +279,7 @@ public class RacoAdapter {
 //		printMatchList(multilineCommentStarterMatcherNoPrefixResults,
 //				"multilineCommentStarterMatcherNoPrefixResults: ");
 //		printMatchList(multilineCommentEnderMatcherResults, "multilineCommentEnderMatcherResults: ");
-		var semikolonOutsideStrings = semikolonMatcherResults.stream()
-				.filter(x -> !stringMatcherResults.stream().anyMatch(y -> x.start() >= y.start() && x.end() <= y.end()))
-				.collect(Collectors.toList());
-		var multilineCommentStarterOutsideString = multilineCommentStarterMatcherResults.stream()
-				.filter(x -> !stringMatcherResults.stream().anyMatch(y -> x.start() >= y.start() && x.end() <= y.end()))
-				.collect(Collectors.toList());
-		;
-//		printMatchList(semikolonOutsideStrings, "semikolonOutsideStrings: ");
-//		printMatchList(multilineCommentStarterOutsideString, "multilineCommentStarterOutsideString: ");
-		var semikolonCommentIndexes = semikolonOutsideStrings.stream().map(x -> x.end() - 1)
-				.collect(Collectors.toList());
-		var multilineCommentStarterIndexes = multilineCommentStarterOutsideString.stream().map(x -> x.end() - 2)
-				.collect(Collectors.toList());
-//		System.out.println(semikolonCommentIndexes.toString());
-//		System.out.println(multilineCommentStarterIndexes.toString());
+
 		String newLine = System.getProperty("line.separator");
 		int multilineCommentDepth = 0;
 		int multilineCommentStartIndex = -1;
@@ -293,7 +287,9 @@ public class RacoAdapter {
 		boolean first = true;
 		int index = 0;
 		int lineNumber = 0;
-		for (String aline : racketCodeWithComments.split(newLine)) {
+		var lines = racketCodeWithComments.split(newLine);
+		for (int lineCounter = 0; lineCounter < lines.length; lineCounter++) {
+			String aline = lines[lineCounter];
 			lineNumber++;
 			if (first) {
 				first = false;
@@ -311,17 +307,22 @@ public class RacoAdapter {
 				index = lineEnd + newLine.length();
 				continue;
 			}
-			var mlcsInLine = multilineCommentStarterMatcherResults.stream().map(x -> x.end() - 2)
+			final List<Range> currentQuoteRanges = quoteRanges;
+			List<Integer> mlcsInLine = multilineCommentStarterMatcherResults.stream().map(x -> x.end() - 2)
 					.filter(x -> x >= lineStart && x < lineEnd).collect(Collectors.toList());
-			var mlcsNoPrefixInLine = multilineCommentStarterMatcherNoPrefixResults.stream().map(x -> x.end() - 2)
+			List<Integer> mlcsNoPrefixInLine = multilineCommentStarterMatcherNoPrefixResults.stream()
+					.map(x -> x.end() - 2).filter(x -> x >= lineStart && x < lineEnd).collect(Collectors.toList());
+			List<Integer> mlcsOutsideOfStringInThisLine = multilineCommentStarterMatcherResults.stream()
+					.map(x -> x.end() - 2).filter(x -> !currentQuoteRanges.stream().anyMatch(y -> y.contains(x))
+							&& x >= lineStart && x < lineEnd)
+					.collect(Collectors.toList());
+			List<Integer> mlceInLine = multilineCommentEnderMatcherResults.stream().map(x -> x.end() - 2)
 					.filter(x -> x >= lineStart && x < lineEnd).collect(Collectors.toList());
-			var mlcsOutsideOfStringInThisLine = multilineCommentStarterIndexes.stream()
-					.filter(x -> x >= lineStart && x < lineEnd).collect(Collectors.toList());
-			var mlceInLine = multilineCommentEnderMatcherResults.stream().map(x -> x.end() - 2)
-					.filter(x -> x >= lineStart && x < lineEnd).collect(Collectors.toList());
-			var scOutsideOfStringInThisLine = semikolonCommentIndexes.stream()
-					.filter(x -> x >= lineStart && x <= lineEnd).collect(Collectors.toList());
-			if (mlcsNoPrefixInLine.contains(lineStart)) { // Fix for the mlcs regex
+			List<Integer> scOutsideOfStringInThisLine = semikolonMatcherResults.stream().map(x -> x.end() - 1).filter(
+					x -> !currentQuoteRanges.stream().anyMatch(y -> y.contains(x)) && x >= lineStart && x <= lineEnd)
+					.collect(Collectors.toList());
+			if (mlcsNoPrefixInLine.contains(lineStart)
+					&& !currentQuoteRanges.stream().anyMatch(x -> x.contains(lineStart))) { // Fix for the mlcs regex
 				mlcsOutsideOfStringInThisLine.add(0, lineStart);
 				mlcsInLine.add(0, lineStart);
 			}
@@ -553,8 +554,17 @@ public class RacoAdapter {
 			int eraseOffset = 0;
 			for (Range r : erase) {
 				String before = aline.substring(0, r.getStart() - lineStart - eraseOffset);
+//				String between = aline.substring(r.getStart() - lineStart - eraseOffset,
+//						r.getEnd() - lineStart - eraseOffset);
 				String after = aline.substring(r.getEnd() - lineStart - eraseOffset);
 				aline = before + after;
+				// Fix string starters in Comments
+				if (quotationMarkMatcherResults.stream().anyMatch(x -> r.contains(x.end() - 1))) {
+					// Reevaluate String Positions
+					ignoreRanges.addAll(quotationMarkMatcherResults.stream().filter(x -> r.contains(x.end() - 1))
+							.collect(Collectors.toList()));
+					quoteRanges = getQuoteRanges(quotationMarkMatcherResults, ignoreRanges);
+				}
 				eraseOffset += r.length();
 			}
 			if (aline.trim().length() > 0 || (origLineLength == 0 && !removeEmptyLines)) {
@@ -568,6 +578,35 @@ public class RacoAdapter {
 //		System.out.println(newCode.toString());
 
 		return newCode.toString();
+	}
+
+	/**
+	 * Gets the Ranges where Quotation Marks are in
+	 * 
+	 * @param quotationMarkMatches the Regex match result for quotes
+	 * @param ignore               the quotes to ignore (probably in comments)
+	 * @return the Ranges where Quotation Marks are in
+	 */
+	private static List<Range> getQuoteRanges(List<MatchResult> quotationMarkMatches, List<MatchResult> ignore) {
+		boolean inQuote = false;
+		int quoteStart = -1;
+		int quoteEnd = -1;
+		List<Range> quoteRanges = new ArrayList<>();
+		for (var match : quotationMarkMatches) {
+			if (ignore.contains(match)) {
+				continue;
+			}
+			if (inQuote == false) {
+				quoteStart = match.end() - 1;
+			} else {
+				quoteEnd = match.end();
+				quoteRanges.add(new Range(quoteStart, quoteEnd));
+				quoteStart = -1;
+				quoteEnd = -1;
+			}
+			inQuote = !inQuote;
+		}
+		return quoteRanges;
 	}
 
 	@SuppressWarnings("unused") // Used for debugging only
