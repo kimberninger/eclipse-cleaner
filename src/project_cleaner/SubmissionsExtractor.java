@@ -440,7 +440,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private boolean processRacketSubmission(File submission, File faultyDir, File tempCurrentSubFolder,
 			File solutionFile) {
 		if (!submission.isDirectory()) {
-			err.println("Cannot Extract submission " + submission.getName()
+			err.println("✗ Cannot Extract submission " + submission.getName()
 					+ " (maybe you didn't choose the correct Language mode?)");
 			moveFolderContent(submission, faultyDir);
 			return false;
@@ -460,7 +460,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		copyFolderContent(submission, tempCurrentSubFolder);
 		// Naming convention check 2
 		if (tempCurrentSubFolder.listFiles().length == 0) {
-			err.println("Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
+			err.println("✗ Abgabeverzeichnis von " + submittorName + " leer: " + submission.getName());
 			System.err.println("Moving to faultyDir...");
 			moveFolderContent(tempCurrentSubFolder, faultyDir);
 			return false;
@@ -474,11 +474,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			e.printStackTrace();
 		}
 		// Convert WXME-Submissions
-		if (submissionContent.contains("#|\n" + "   This file uses the GRacket editor format.\n"
-				+ "   Open this file in DrRacket version 7.9 or later to read it.\n" + "\n"
-				+ "   Most likely, it was created by saving a program in DrRacket,\n"
-				+ "   and it probably contains a program with non-text elements\n"
-				+ "   (such as images or comment boxes).\n" + "\n" + "            http://racket-lang.org/\n" + "|#")) {
+		if (submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0108 ## ") || submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0109 ## ")) {
 			submissionProjectFile = raco.convertWxmeSubmission(submissionProjectFile.toFile()).toPath();
 			try {
 				submissionContent = Files.readString(submissionProjectFile);
@@ -489,15 +485,16 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		}
 		// Testing Phase
 		String projectName = submissionProjectFile.toFile().getName();
+		String submissionContentWithoutComments = RacoAdapter.removeCommentsFromCode(submissionContent);
 		if (racketInstructionSet.shouldCheck_naming_convention()
-				&& !checkRacketNamingConvention(submissionProjectFile.toFile().getName(), submissionContent,
-						submittorName)) {
+				&& !checkRacketNamingConvention(submissionProjectFile.toFile().getName(),
+						submissionContentWithoutComments, submittorName)) {
 			System.err.println("Moving to faultyDir...");
 			moveFolderContent(submission, faultyDir);
 			return false;
 		}
 		if (racketInstructionSet.isDo_tests()) {
-			System.err.println("Automated testing is planned but not yet implemented.");
+			System.err.println("✗ Automated testing is planned but not yet implemented.");
 		}
 		// Project is ready to import, make sure fileName doesn't exist already
 		Path finalProjectPath = submissionProjectFile.toAbsolutePath();
@@ -515,11 +512,12 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		}
 		// Move Project to main Target dir
 		try {
-			Files.move(finalProjectPath, outputDir.toPath(), StandardCopyOption.REPLACE_EXISTING);
+//			Files.copy(finalProjectPath, outputDir.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			moveFolderContent(tempCurrentSubFolder, outputDir);
 			return true;
-		} catch (IOException e) {
-			System.out.println("Could not move the fixed Project to target directory");
-			System.err.println(e.getMessage());
+		} catch (Exception e) {
+			System.err.println("✗ Could not move the fixed Project to target directory");
+			e.printStackTrace();
 			moveFolderContent(tempCurrentSubFolder, faultyDir);
 			return false;
 		}
@@ -528,12 +526,12 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private boolean checkRacketNamingConvention(String fileName, String fileContent, String submittorName) {
 		// Filename
 		if (languageMode != LanguageMode.RACKET) {
-			err.println("Method checkRacketNamingConvention() was called in non-racket-Mode");
+			err.println("✗ Method checkRacketNamingConvention() was called in non-racket-Mode");
 			return false;
 		}
 		RacketActionSetModel racketInstructionSet = (RacketActionSetModel) instructionSet;
 		if (!fileName.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+.rkt")) {
-			err.println("Namenskonvention verletzt bei " + submittorName + ": " + fileName);
+			err.println("✗ Namenskonvention verletzt bei " + submittorName + ": " + fileName);
 			if (racketInstructionSet.shouldFix_naming_convention()) {
 				// Get correct project name
 				String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
@@ -543,26 +541,30 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			} else {
 				return false;
 			}
+		} else {
+			System.out.println("✓ Namenskonvention eingehalten");
 		}
 		ArrayList<String> check_contained = racketInstructionSet.getVerify_strings_contained();
 		if (check_contained != null && !check_contained.isEmpty()) {
 			for (String contains : check_contained) {
 				if (!fileContent.contains(contains)) {
-					System.err.println("Submission from " + submittorName + " does not contain the following keyword: "
-							+ contains);
+					System.err.println("✗ Submission from " + submittorName
+							+ " does not contain the following keyword: " + contains);
 					return false;
 				}
 			}
+			System.out.println("✓ All required Keywords are present");
 		}
 		ArrayList<String> check__not_contained = racketInstructionSet.getVerify_strings_not_contained();
 		if (check__not_contained != null && !check__not_contained.isEmpty()) {
 			for (String contains : check__not_contained) {
 				if (fileContent.contains(contains)) {
-					System.err.println("Submission from " + submittorName
+					System.err.println("✗ Submission from " + submittorName
 							+ " contains the following forbidden keyword: " + contains);
 					return false;
 				}
 			}
+			System.out.println("✓ No Forbidden functions/keywords used");
 		}
 		return true;
 	}
