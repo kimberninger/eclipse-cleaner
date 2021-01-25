@@ -202,7 +202,7 @@ public class RacoAdapter {
 
 	/**
 	 * Executes the raco test command on a given {@link String} in a given
-	 * {@link Path}
+	 * {@link Path} and deletes the File afterwards
 	 * 
 	 * @param racketCode the Racket-Code-{@link String}
 	 * @param path       the execution {@link Path}
@@ -210,7 +210,9 @@ public class RacoAdapter {
 	 */
 	public RacketTestResult racoTest(String racketCode, Path path) {
 		File rktFile = FileUtils.createTextFile(path, racketCode);
-		return racoTest(rktFile);
+		RacketTestResult result = racoTest(rktFile);
+		rktFile.delete();
+		return result;
 	}
 
 	/**
@@ -222,6 +224,22 @@ public class RacoAdapter {
 	 */
 	public RacketTestResult racoTest(String racketCode) {
 		return racoTest(racketCode, Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename));
+	}
+
+	/**
+	 * Invocation of {@link #racoTest(String)} with a given {@link RacketTest}
+	 * appended to the Code and stored in the result
+	 * 
+	 * @param racketCode the Racket-Code-{@link String}
+	 * @param test       the {@link RacketTest} to execute on the given Code
+	 * @return the {@link RacketTestResult} with the {@link RacketTest} stored
+	 */
+	public RacketTestResult racoTest(String racketCode, RacketTest test) {
+		String testCode = racketCode + test.getCode();
+		RacketTestResult result = racoTest(testCode,
+				Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename));
+		result.setTest(test);
+		return result;
 	}
 
 	/**
@@ -660,9 +678,110 @@ public class RacoAdapter {
 		return quoteRanges;
 	}
 
+	/**
+	 * Invocation of {@link #getQuoteRanges(List, List)} with no ignore Cases
+	 * 
+	 * @param quotationMarkMatches the Regex match result for quotes
+	 * @return the Ranges where Quotation Marks are in
+	 */
+	public static List<Range> getQuoteRanges(List<MatchResult> quotationMarkMatches) {
+		return getQuoteRanges(quotationMarkMatches, new ArrayList<MatchResult>());
+	}
+
 	@SuppressWarnings("unused") // Used for debugging only
 	private static void printMatchList(List<MatchResult> matches, String name) {
 		System.out.println(matches.stream().map(x -> String.format("{start: %s, end: %s}", x.start(), x.end()))
 				.collect(Collectors.joining(",", name + "[", "]")));
+	}
+
+	/**
+	 * Returns true if a range List contains a given number
+	 * 
+	 * @param ranges the Range list
+	 * @param i      the number to check is contained
+	 * @return true if contained
+	 */
+	private static boolean rangeListContains(List<Range> ranges, int i) {
+		return ranges.stream().anyMatch(x -> x.contains(i));
+	}
+
+	/**
+	 * Returns true if a range List contains a given range
+	 * 
+	 * @param ranges the Range list
+	 * @param r      the range to check is contained
+	 * @return true if contained
+	 */
+	private static boolean rangeListContains(List<Range> ranges, Range r) {
+		return ranges.stream().anyMatch(x -> x.contains(r));
+	}
+
+	/**
+	 * Removes the Tests from a Racket Code
+	 * 
+	 * @param racketCode the Racket Code
+	 * @return the Code with the tests Removed
+	 */
+	public static String removeTests(String racketCode) {
+		// Code must not contain Comments for this string matcher to work:
+
+		// Quotes
+		Pattern quotationMarkRegex = Pattern.compile("(?<!\\\\)(?:[\\\\]{2})*\"");
+		Matcher quotationMarkMatcher = quotationMarkRegex.matcher(racketCode);
+		var quotationMarkMatcherResults = quotationMarkMatcher.results().collect(Collectors.toList());
+		List<Range> quotes = getQuoteRanges(quotationMarkMatcherResults);
+
+		// Test Constructs
+		var openingBraces = List.of('(', '[', '{');
+		var closingBraces = List.of(')', ']', '}');
+
+		Pattern testConstructRegex = Pattern.compile(
+				"(check-expect|check-within|check-member-of|check-satisfied|check-range|check-error|check-property)");
+		Matcher testConstructMatcher = testConstructRegex.matcher(racketCode);
+		// Only get Test constructs outside of strings
+		var testConstructs = testConstructMatcher.results()
+				.filter(x -> !rangeListContains(quotes, new Range(x.start(), x.end()))).collect(Collectors.toList());
+		List<Range> tests = new ArrayList<>();
+		for (var test_construct : testConstructs) {
+			// Find Left brace
+			int startIndex = test_construct.start();
+			while (startIndex >= 0 && !openingBraces.contains(racketCode.charAt(startIndex))) {
+				startIndex--;
+			}
+			if (startIndex < 0) {
+				System.err.println("Could not remove test at index " + test_construct.start());
+				continue;
+			}
+			Character openingBraceType = racketCode.charAt(startIndex);
+			Character closingBraceType = closingBraces.get(openingBraces.indexOf(openingBraceType));
+			int paranthesis_depth = 1;
+			int endIndex = test_construct.end();
+			while (paranthesis_depth > 0 && endIndex < racketCode.length()) {
+				Character currentChar = racketCode.charAt(endIndex);
+				if (currentChar.equals(openingBraceType) && !rangeListContains(quotes, currentChar)) {
+					paranthesis_depth++;
+				} else if (currentChar.equals(closingBraceType) && !rangeListContains(quotes, currentChar)) {
+					paranthesis_depth--;
+				}
+				endIndex++;
+			}
+			if (endIndex > racketCode.length()) {
+				System.err.println("Could not remove test at index " + test_construct.start());
+				continue;
+			}
+			tests.add(new Range(startIndex, endIndex));
+		}
+		// actually remove the tests
+		int eraseOffset = 0;
+//		List<String> testStrings = new ArrayList<>();
+		for (Range test : tests) {
+			String before = racketCode.substring(0, test.getStart() - eraseOffset);
+//			String between = racketCode.substring(test.getStart() - eraseOffset, test.getEnd() - eraseOffset);
+			String after = racketCode.substring(test.getEnd() - eraseOffset);
+//			testStrings.add(between);
+			racketCode = before + after;
+			eraseOffset += test.length();
+		}
+		return racketCode;
 	}
 }

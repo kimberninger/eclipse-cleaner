@@ -12,6 +12,7 @@ public class RacketActionSetModel extends ActionSetModel {
 
 	private boolean remove_student_tests = true, do_tests = true, verify_that_code_runs = true;
 	private ArrayList<String> verify_strings_contained, verify_strings_not_contained;
+	private ArrayList<RacketTask> tasks;
 
 	/**
 	 * @return the remove_student_tests
@@ -81,6 +82,20 @@ public class RacketActionSetModel extends ActionSetModel {
 	 */
 	public void setVerify_strings_not_contained(ArrayList<String> verify_strings_not_contained) {
 		this.verify_strings_not_contained = verify_strings_not_contained;
+	}
+
+	/**
+	 * @return the tasks
+	 */
+	public ArrayList<RacketTask> getTasks() {
+		return tasks;
+	}
+
+	/**
+	 * @param tasks the tasks to set
+	 */
+	public void setTasks(ArrayList<RacketTask> tasks) {
+		this.tasks = tasks;
 	}
 
 }

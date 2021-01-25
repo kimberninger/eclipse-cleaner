@@ -47,7 +47,6 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private JProgressBar pb;
 	private LanguageMode languageMode = LanguageMode.JAVA;
 	private ActionSetModel instructionSet;
-	private boolean automaticallyFixNamingConvention = true;
 	private RacoAdapter raco;
 
 	private enum FileReadMode {
@@ -81,10 +80,12 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 
 	// -- Getters+Setters --\\
 
+	@SuppressWarnings("exports")
 	public void setProgressBar(JProgressBar pb) {
 		this.pb = pb;
 	}
 
+	@SuppressWarnings("exports")
 	public JProgressBar getProgressBar() {
 		return pb;
 	}
@@ -448,9 +449,9 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		String submittorName = submission.getName().split("_")[0];
 		RacketActionSetModel racketInstructionSet = (RacketActionSetModel) instructionSet;
 		if (racketInstructionSet.isDo_tests()) {
-			log.println("------------------------------------");
+			log.println("------------------------------------------------------------------------------");
 			log.println("Submission from: " + submittorName);
-			log.println("------------------------------------");
+			log.println("------------------------------------------------------------------------------");
 
 		} else {
 			log.println("Extracting Submission from: " + submittorName);
@@ -470,16 +471,15 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		try {
 			submissionContent = Files.readString(submissionProjectFile);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		// Convert WXME-Submissions
-		if (submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0108 ## ") || submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0109 ## ")) {
+		if (submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0108 ## ")
+				|| submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0109 ## ")) {
 			submissionProjectFile = raco.convertWxmeSubmission(submissionProjectFile.toFile()).toPath();
 			try {
 				submissionContent = Files.readString(submissionProjectFile);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -494,10 +494,38 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			return false;
 		}
 		if (racketInstructionSet.isDo_tests()) {
-			System.err.println("✗ Automated testing is planned but not yet implemented.");
+			String codeWithoutTestsAndComments = RacoAdapter.removeTests(submissionContentWithoutComments);
+			int passed = 0;
+			int testCount = 0;
+			for (RacketTask task : racketInstructionSet.getTasks()) {
+				System.out.println(task.getTitle());
+				System.out.println("-----------------------------------------------------");
+				if (task.getAnnotation() != null) {
+					System.out.println(task.getAnnotation());
+				}
+				for (RacketTest test : task.getTests()) {
+					testCount++;
+					if (test.getRepeat() == 1) {
+						System.out.println("running \"" + test.getTitle() + "\"...");
+					} else {
+						System.out.println("running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
+
+					}
+					RacketTestResult result = raco.racoTest(codeWithoutTestsAndComments, test);
+					if (result.hasPassed()) {
+						passed++;
+						System.out.println("✓ " + test.getTitle() + " has passed");
+					} else {
+						System.err.println("✗ Test \"" + test.getTitle() + "\" did not pass:");
+						System.err.println(result.getResultString());
+					}
+				}
+			}
+			System.out.format("Passed %s of %s tests", passed, testCount);
+//			System.err.println("✗ Automated testing is planned but not yet implemented.");
 		}
 		// Project is ready to import, make sure fileName doesn't exist already
-		Path finalProjectPath = submissionProjectFile.toAbsolutePath();
+//		Path finalProjectPath = submissionProjectFile.toAbsolutePath();
 		if (Stream.of(outputDir.listFiles()).anyMatch(x -> !x.isDirectory() && x.getName().equals(projectName))) {
 			err.println("Project File  named " + submissionProjectFile.toFile().getName()
 					+ " already exists. renaming to: " + projectName + "(1)");
@@ -508,7 +536,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 				moveFolderContent(submission, faultyDir);
 				return false;
 			}
-			finalProjectPath = newProjectFile.toPath().toAbsolutePath();
+//			finalProjectPath = newProjectFile.toPath().toAbsolutePath();
 		}
 		// Move Project to main Target dir
 		try {
@@ -569,6 +597,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		return true;
 	}
 
+	@SuppressWarnings("unused")
 	private boolean checkRacketNamingConvention(File rktFile, String SubmittorName) throws IOException {
 		return checkRacketNamingConvention(rktFile.getName(), SubmittorName, Files.readString(rktFile.toPath()));
 	}
