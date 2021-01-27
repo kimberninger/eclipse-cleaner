@@ -10,6 +10,7 @@ public class RacketTest {
 	private String description;
 	private int repeat = 1;
 	private String code;
+	private int maxEcecTimeInSeconds = 30;
 
 	/**
 	 * @return the title
@@ -65,5 +66,19 @@ public class RacketTest {
 	 */
 	public void setCode(String code) {
 		this.code = code;
+	}
+
+	/**
+	 * @return the maxEcecTimeInSeconds
+	 */
+	public int getMaxEcecTimeInSeconds() {
+		return maxEcecTimeInSeconds;
+	}
+
+	/**
+	 * @param maxEcecTimeInSeconds the maxEcecTimeInSeconds to set
+	 */
+	public void setMaxEcecTimeInSeconds(int maxEcecTimeInSeconds) {
+		this.maxEcecTimeInSeconds = maxEcecTimeInSeconds;
 	}
 }

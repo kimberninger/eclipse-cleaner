@@ -476,12 +476,14 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		// Convert WXME-Submissions
 		if (submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0108 ## ")
 				|| submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0109 ## ")) {
+			System.out.println("Converting WXME-Submission...");
 			submissionProjectFile = raco.convertWxmeSubmission(submissionProjectFile.toFile()).toPath();
 			try {
 				submissionContent = Files.readString(submissionProjectFile);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
+			System.out.println("✓ Sucessfully converted from WXME-Format");
 		}
 		// Testing Phase
 		String projectName = submissionProjectFile.toFile().getName();
@@ -495,9 +497,20 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		}
 		if (racketInstructionSet.isDo_tests()) {
 			String codeWithoutTestsAndComments = RacoAdapter.removeTests(submissionContentWithoutComments);
+			if(codeWithoutTestsAndComments == null) {
+				moveFolderContent(submission, faultyDir);
+				return false;
+			}
+			if (!raco.racoTest(codeWithoutTestsAndComments).ok()) {
+				System.err.println(
+						"✗ The code of the student does not run successfully without tests, so it cannot be tested automatically.");
+				moveFolderContent(submission, faultyDir);
+				return false;
+			}
 			int passed = 0;
 			int testCount = 0;
 			for (RacketTask task : racketInstructionSet.getTasks()) {
+				System.out.println();
 				System.out.println(task.getTitle());
 				System.out.println("-----------------------------------------------------");
 				if (task.getAnnotation() != null) {
@@ -506,9 +519,9 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 				for (RacketTest test : task.getTests()) {
 					testCount++;
 					if (test.getRepeat() == 1) {
-						System.out.println("running \"" + test.getTitle() + "\"...");
+						System.out.println("❯  running \"" + test.getTitle() + "\"...");
 					} else {
-						System.out.println("running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
+						System.out.println("❯  running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
 
 					}
 					RacketTestResult result = raco.racoTest(codeWithoutTestsAndComments, test);
@@ -521,7 +534,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 					}
 				}
 			}
-			System.out.format("Passed %s of %s tests", passed, testCount);
+			System.out.format("Passed %s of %s tests \n", passed, testCount);
 //			System.err.println("✗ Automated testing is planned but not yet implemented.");
 		}
 		// Project is ready to import, make sure fileName doesn't exist already

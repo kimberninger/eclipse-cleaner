@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -142,6 +143,17 @@ public class RacoAdapter {
 	 * @return a {@link CommandResult} that stores information about the execution
 	 */
 	public static CommandResult executeShellComand(String... command) {
+		return executeShellComand(-1, command);
+	}
+
+	/**
+	 * Executes a Shell command and handels occuring errors
+	 * 
+	 * @param timeoutInSeconds The Timeout in Seconds
+	 * @param command          The command to be executed
+	 * @return a {@link CommandResult} that stores information about the execution
+	 */
+	public static CommandResult executeShellComand(int timeoutInSeconds, String... command) {
 		String s;
 		String t;
 		StringBuilder output = new StringBuilder();
@@ -149,6 +161,14 @@ public class RacoAdapter {
 		Process p;
 		try {
 			p = Runtime.getRuntime().exec(command);
+			if (timeoutInSeconds > 0) {
+				if (!p.waitFor(timeoutInSeconds, TimeUnit.SECONDS)) {
+					p.destroyForcibly();
+					return new CommandResult(
+							"The Execution tool longer than the time Limit of " + timeoutInSeconds + " second(s).", -1,
+							false, null);
+				}
+			}
 			BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
 			BufferedReader be = new BufferedReader(new InputStreamReader(p.getErrorStream()));
 			s = br.readLine();
@@ -188,7 +208,19 @@ public class RacoAdapter {
 	 * @return the {@link RacketTestResult}
 	 */
 	public RacketTestResult racoTest(File rktFile) {
-		CommandResult result = executeShellComand(raco.getAbsolutePath(), "test", "--quiet", rktFile.getAbsolutePath());
+		return racoTest(rktFile, -1);
+	}
+
+	/**
+	 * Executes the raco test command on a given {@link File}
+	 * 
+	 * @param rktFile the Racket Code {@link File}
+	 * @param Timeout The Timeout in Seconds
+	 * @return the {@link RacketTestResult}
+	 */
+	public RacketTestResult racoTest(File rktFile, int timeout) {
+		CommandResult result = executeShellComand(timeout, raco.getAbsolutePath(), "test", "--quiet",
+				rktFile.getAbsolutePath());
 		if (result.ok()) {
 			String testResult = result.getResultString();
 			if (testResult.toLowerCase().contains("test passed") || testResult.toLowerCase().contains("tests passed")) {
@@ -209,8 +241,20 @@ public class RacoAdapter {
 	 * @return the {@link RacketTestResult}
 	 */
 	public RacketTestResult racoTest(String racketCode, Path path) {
+		return racoTest(racketCode, path, -1);
+	}
+
+	/**
+	 * Executes the raco test command on a given {@link String} in a given
+	 * {@link Path} and deletes the File afterwards
+	 * 
+	 * @param racketCode the Racket-Code-{@link String}
+	 * @param path       the execution {@link Path}
+	 * @return the {@link RacketTestResult}
+	 */
+	public RacketTestResult racoTest(String racketCode, Path path, int timeout) {
 		File rktFile = FileUtils.createTextFile(path, racketCode);
-		RacketTestResult result = racoTest(rktFile);
+		RacketTestResult result = racoTest(rktFile, timeout);
 		rktFile.delete();
 		return result;
 	}
@@ -223,7 +267,20 @@ public class RacoAdapter {
 	 * @return the {@link RacketTestResult}
 	 */
 	public RacketTestResult racoTest(String racketCode) {
-		return racoTest(racketCode, Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename));
+		return racoTest(racketCode, -1);
+	}
+
+	/**
+	 * Invocation of {@link #racoTest(String, Path)} with
+	 * {@link #executionDirectory} and {@link #defaultTempFilename}
+	 * 
+	 * @param racketCode the Racket-Code-{@link String}
+	 * @param Timeout    The Timeout in Seconds
+	 * @return the {@link RacketTestResult}
+	 */
+	public RacketTestResult racoTest(String racketCode, int timeout) {
+		return racoTest(racketCode, Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename),
+				timeout);
 	}
 
 	/**
@@ -237,7 +294,8 @@ public class RacoAdapter {
 	public RacketTestResult racoTest(String racketCode, RacketTest test) {
 		String testCode = racketCode + test.getCode();
 		RacketTestResult result = racoTest(testCode,
-				Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename));
+				Paths.get(executionDirectory.toAbsolutePath().toString(), defaultTempFilename),
+				test.getMaxEcecTimeInSeconds());
 		result.setTest(test);
 		return result;
 	}
@@ -668,7 +726,7 @@ public class RacoAdapter {
 			if (inQuote == false) {
 				quoteStart = match.end() - 1;
 			} else {
-				quoteEnd = match.end();
+				quoteEnd = match.end() - 1;
 				quoteRanges.add(new Range(quoteStart, quoteEnd));
 				quoteStart = -1;
 				quoteEnd = -1;
@@ -724,7 +782,7 @@ public class RacoAdapter {
 	 */
 	public static String removeTests(String racketCode) {
 		// Code must not contain Comments for this string matcher to work:
-
+		System.out.println("Removing Students Tests...");
 		// Quotes
 		Pattern quotationMarkRegex = Pattern.compile("(?<!\\\\)(?:[\\\\]{2})*\"");
 		Matcher quotationMarkMatcher = quotationMarkRegex.matcher(racketCode);
@@ -750,6 +808,7 @@ public class RacoAdapter {
 			}
 			if (startIndex < 0) {
 				System.err.println("Could not remove test at index " + test_construct.start());
+				System.err.println("Skipping all Following tests");
 				continue;
 			}
 			Character openingBraceType = racketCode.charAt(startIndex);
@@ -758,16 +817,16 @@ public class RacoAdapter {
 			int endIndex = test_construct.end();
 			while (paranthesis_depth > 0 && endIndex < racketCode.length()) {
 				Character currentChar = racketCode.charAt(endIndex);
-				if (currentChar.equals(openingBraceType) && !rangeListContains(quotes, currentChar)) {
+				if (currentChar.equals(openingBraceType) && !rangeListContains(quotes, endIndex)) {
 					paranthesis_depth++;
-				} else if (currentChar.equals(closingBraceType) && !rangeListContains(quotes, currentChar)) {
+				} else if (currentChar.equals(closingBraceType) && !rangeListContains(quotes, endIndex)) {
 					paranthesis_depth--;
 				}
 				endIndex++;
 			}
 			if (endIndex > racketCode.length()) {
 				System.err.println("Could not remove test at index " + test_construct.start());
-				continue;
+				break;
 			}
 			tests.add(new Range(startIndex, endIndex));
 		}
@@ -775,6 +834,10 @@ public class RacoAdapter {
 		int eraseOffset = 0;
 //		List<String> testStrings = new ArrayList<>();
 		for (Range test : tests) {
+			if (tests.stream().anyMatch(x -> x != test && x.contains(test))) {
+				System.out.println("Found overlapping test, aborting (probably a syntax error)");
+				return null;
+			}
 			String before = racketCode.substring(0, test.getStart() - eraseOffset);
 //			String between = racketCode.substring(test.getStart() - eraseOffset, test.getEnd() - eraseOffset);
 			String after = racketCode.substring(test.getEnd() - eraseOffset);
