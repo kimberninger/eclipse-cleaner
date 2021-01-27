@@ -476,14 +476,15 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		// Convert WXME-Submissions
 		if (submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0108 ## ")
 				|| submissionContent.startsWith("#reader(lib\"read.ss\"\"wxme\")WXME0109 ## ")) {
-			System.out.println("Converting WXME-Submission...");
+			System.out.print("Converting WXME-Submission...");
 			submissionProjectFile = raco.convertWxmeSubmission(submissionProjectFile.toFile()).toPath();
 			try {
 				submissionContent = Files.readString(submissionProjectFile);
 			} catch (IOException e) {
+				System.out.println();
 				e.printStackTrace();
 			}
-			System.out.println("✓ Sucessfully converted from WXME-Format");
+			System.out.println("Done");
 		}
 		// Testing Phase
 		String projectName = submissionProjectFile.toFile().getName();
@@ -509,7 +510,15 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			}
 			int passed = 0;
 			int testCount = 0;
-			for (RacketTask task : racketInstructionSet.getTasks()) {
+			var tasks = racketInstructionSet.getTasks();
+			ArrayList<RacketTest> tests = new ArrayList<>();
+			for(var task : tasks) {
+				tests.addAll(task.getTests());
+			}
+			System.out.print("❯  running Tests...");
+			var results = raco.racoTest(codeWithoutTestsAndComments, tests);
+			System.out.println("Done");
+			for (RacketTask task : tasks) {
 				System.out.println();
 				System.out.println(task.getTitle());
 				System.out.println("-----------------------------------------------------");
@@ -518,13 +527,17 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 				}
 				for (RacketTest test : task.getTests()) {
 					testCount++;
-					if (test.getRepeat() == 1) {
-						System.out.println("❯  running \"" + test.getTitle() + "\"...");
-					} else {
-						System.out.println("❯  running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
-
+//					if (test.getRepeat() == 1) {
+//						System.out.println("❯  running \"" + test.getTitle() + "\"...");
+//					} else {
+//						System.out.println("❯  running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
+//
+//					}
+					RacketTestResult result = results.stream().filter(x -> x.getTest().equals(test)).findFirst().orElse(null);
+					if(result == null) {
+						System.err.println("Something went wrong with the quick testing method.");
+						continue;
 					}
-					RacketTestResult result = raco.racoTest(codeWithoutTestsAndComments, test);
 					if (result.hasPassed()) {
 						passed++;
 						System.out.println("✓ " + test.getTitle() + " has passed");
@@ -534,6 +547,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 					}
 				}
 			}
+			
 			System.out.format("Passed %s of %s tests \n", passed, testCount);
 //			System.err.println("✗ Automated testing is planned but not yet implemented.");
 		}

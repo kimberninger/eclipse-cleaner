@@ -6,7 +6,9 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
@@ -298,6 +300,88 @@ public class RacoAdapter {
 				test.getMaxEcecTimeInSeconds());
 		result.setTest(test);
 		return result;
+	}
+
+	public ArrayList<RacketTestResult> racoTest(String racketCode, List<RacketTest> tests) {
+		ArrayList<RacketTestResult> result = new ArrayList<>();
+		StringBuilder modifiedRacketCodeBuilder = new StringBuilder(racketCode);
+		String newLine = System.getProperty("line.separator");
+		modifiedRacketCodeBuilder.append(newLine);
+		String testIdentifier = "\"------------Test_Start---------)\"";
+		modifiedRacketCodeBuilder.append("(print " + testIdentifier + ")");
+		for (RacketTest t : tests) {
+			modifiedRacketCodeBuilder.append(newLine);
+			modifiedRacketCodeBuilder.append(t.getCode());
+		}
+		String modifiedRacketCode = removeEmptyLines(modifiedRacketCodeBuilder.toString());
+//		String[] racketLines = modifiedRacketCode.split(newLine);
+		TreeMap<Range, RacketTest> testsInCode = findTests(modifiedRacketCode, tests);
+		RacketTestResult totalTestResult = racoTest(modifiedRacketCode, 60);
+		String totalTestResultString = totalTestResult.getResultString();
+		int startIndex = totalTestResultString.lastIndexOf(testIdentifier) + testIdentifier.length();
+		totalTestResultString = totalTestResultString.substring(startIndex);
+		var lines = totalTestResultString.lines().collect(Collectors.toList());
+		String firstLine = totalTestResultString.lines().findFirst().orElse("");
+		if (totalTestResultString.toLowerCase().contains("test passed")
+				|| totalTestResultString.toLowerCase().contains("tests passed")) {
+			for (RacketTest t : tests) {
+				result.add(new RacketTestResult(totalTestResultString, true, t));
+			}
+		} else if (firstLine.matches("Ran [0-9]+ check[s]?.")) {
+			int numberOfTests = Integer.parseInt(firstLine.replaceAll("[^\\d]+", ""));
+			int failedTests = Integer.parseInt(lines.get(1).replaceAll("[^\\d]+", " ").trim().split(" ")[0]);
+			if (failedTests == 0) {
+				// No Test passed (in this case the string says 0 tests passed)
+				failedTests = numberOfTests;
+			}
+			int resultstartline = 2;
+			int resultendline = -1;
+			for (int i = 0; i < failedTests; i++) {
+				resultendline = resultstartline;
+				while (!lines.get(resultendline).trim().matches("In .+ at line [0-9]+ column [0-9]+")) {
+					resultendline++;
+				}
+				String[] numbersInLine = lines.get(resultendline).replaceAll("[^\\d]+", " ").trim().split(" ");
+				int lineNumber = Integer.parseInt(numbersInLine[numbersInLine.length - 2]);
+				int Column = Integer.parseInt(numbersInLine[numbersInLine.length - 1]);
+				int pos = lineNumberAndColToPos(lineNumber, Column, modifiedRacketCode);
+				// Get test
+				if (!testsInCode.keySet().stream().anyMatch(x -> x.contains(pos))) {
+					System.err.println("Code contains test that was not found");
+				}
+				Range testRange = testsInCode.keySet().stream().filter(x -> x.contains(pos)).findFirst().get();
+				RacketTest test = testsInCode.get(testRange);
+				StringBuilder testResultBuilder = new StringBuilder();
+				for (int j = resultstartline; j < resultendline; j++) {
+					testResultBuilder.append(newLine);
+					testResultBuilder.append(lines.get(j));
+				}
+				String testResult = removeEmptyLines(testResultBuilder.toString());
+				result.add(new RacketTestResult(testResult, false, test));
+				resultstartline = resultendline + 1;
+				resultendline = -1;
+			}
+			// The other Tests Passed
+			for (var t : tests) {
+				if (!result.stream().anyMatch(x -> x.getTest().equals(t))) {
+					result.add(new RacketTestResult("The Test passed", true, t));
+				}
+			}
+		} else {
+			System.err.println("Someth");
+		}
+		return result;
+	}
+
+	private int lineNumberAndColToPos(int lineNumber, int col, String s) {
+		String newLine = System.getProperty("line.separator");
+		var lines = s.split(newLine);
+		int lineStart = 0;
+		for (int currLineNumber = 1; currLineNumber < lineNumber; currLineNumber++) {
+			lineStart += lines[currLineNumber - 1].length();
+			lineStart += newLine.length();
+		}
+		return lineStart + col;
 	}
 
 	/**
@@ -775,14 +859,13 @@ public class RacoAdapter {
 	}
 
 	/**
-	 * Removes the Tests from a Racket Code
+	 * Gets the {@link Range}s of Tests in a given Racket Code
 	 * 
-	 * @param racketCode the Racket Code
-	 * @return the Code with the tests Removed
+	 * @param racketCode the Racket Code to match
+	 * @return the {@link Range}s of Tests in a given Racket Code
 	 */
-	public static String removeTests(String racketCode) {
+	public static List<Range> getTestRanges(String racketCode) {
 		// Code must not contain Comments for this string matcher to work:
-		System.out.println("Removing Students Tests...");
 		// Quotes
 		Pattern quotationMarkRegex = Pattern.compile("(?<!\\\\)(?:[\\\\]{2})*\"");
 		Matcher quotationMarkMatcher = quotationMarkRegex.matcher(racketCode);
@@ -807,8 +890,8 @@ public class RacoAdapter {
 				startIndex--;
 			}
 			if (startIndex < 0) {
-				System.err.println("Could not remove test at index " + test_construct.start());
-				System.err.println("Skipping all Following tests");
+				System.err.println("Could not find end for test at index " + test_construct.start());
+				System.err.println("Skipping...");
 				continue;
 			}
 			Character openingBraceType = racketCode.charAt(startIndex);
@@ -830,12 +913,25 @@ public class RacoAdapter {
 			}
 			tests.add(new Range(startIndex, endIndex));
 		}
+		return tests;
+	}
+
+	/**
+	 * Removes the Tests from a Racket Code
+	 * 
+	 * @param racketCode the Racket Code
+	 * @return the Code with the tests Removed
+	 */
+	public static String removeTests(String racketCode) {
+		// Code must not contain Comments for this string matcher to work:
+		System.out.print("Removing Students Tests...");
+		List<Range> tests = getTestRanges(racketCode);
 		// actually remove the tests
 		int eraseOffset = 0;
 //		List<String> testStrings = new ArrayList<>();
 		for (Range test : tests) {
 			if (tests.stream().anyMatch(x -> x != test && x.contains(test))) {
-				System.out.println("Found overlapping test, aborting (probably a syntax error)");
+				System.out.println("\nFound overlapping test, aborting (probably a syntax error)");
 				return null;
 			}
 			String before = racketCode.substring(0, test.getStart() - eraseOffset);
@@ -845,6 +941,47 @@ public class RacoAdapter {
 			racketCode = before + after;
 			eraseOffset += test.length();
 		}
+		System.out.println("Done");
 		return racketCode;
+	}
+
+	/**
+	 * Removes empty Lines from a given {@link String}
+	 * 
+	 * @param s the {@link String} to remove all empty lines from
+	 * @return the {@link String} with all Empty Lines removed
+	 */
+	public static String removeEmptyLines(String s) {
+		return s.replaceAll("(?m)^[ \\t]*\\r?\\n", "");
+	}
+
+	/**
+	 * Finds the Line Numbers of tests known to be in the Code
+	 * 
+	 * @param RacketCode the Code Containing the given tests
+	 * @param tests      the {@link RacketTest}s in the same order as in the code
+	 * @return the A {@link HashMap} with the Tests and their coresponding line
+	 *         Numbers
+	 */
+	public static TreeMap<Range, RacketTest> findTests(String RacketCode, List<RacketTest> tests) {
+		// tests must have the same order as in Code
+		TreeMap<Range, RacketTest> result = new TreeMap<>();
+		var testRanges = getTestRanges(RacketCode);
+		TreeMap<Range, String> testsInCode = new TreeMap<>();
+		for (var range : testRanges) {
+			testsInCode.put(range, RacketCode.substring(range.getStart(), range.getEnd()));
+		}
+		for (int i = 0; i < tests.size(); i++) {
+			var test = tests.get(i);
+			// Validate test order
+			var estimatedRange = testRanges.get(i);
+			var foundTestCode = testsInCode.get(estimatedRange);
+			if (!test.getCode().contains(foundTestCode)) {
+				System.err.println("Test Missmatch, skipping test");
+				continue;
+			}
+			result.put(estimatedRange, test);
+		}
+		return result;
 	}
 }

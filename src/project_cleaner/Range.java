@@ -6,7 +6,7 @@ package project_cleaner;
  * @author Ruben Deisenroth
  *
  */
-public class Range {
+public class Range implements Comparable<Range> {
 	private int start;
 	private int end;
 
@@ -70,5 +70,16 @@ public class Range {
 	 */
 	public boolean contains(Range range) {
 		return contains(range.start) && contains(range.end);
+	}
+
+	@Override
+	public int compareTo(Range o) {
+		if (this.contains(o) || o.contains(this)) {
+			return 0;
+		} else if (this.start > o.end) {
+			return 1;
+		} else {
+			return -1;
+		}
 	}
 }
