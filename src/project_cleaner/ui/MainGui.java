@@ -534,7 +534,7 @@ public class MainGui extends javax.swing.JFrame {
 		case JAVA:
 			JavaModeRadioButton.setSelected(true);
 			RacketModeRadioButton.setSelected(false);
-			jLabel4.setText("Losungsarchiv:");
+			jLabel4.setText("Lösungsarchiv:");
 			jLabel5.setText("Datei-Liste:");
 			jLabel5.setEnabled(true);
 			fileListFileField.setEnabled(true);
@@ -545,7 +545,7 @@ public class MainGui extends javax.swing.JFrame {
 		case RACKET:
 			JavaModeRadioButton.setSelected(false);
 			RacketModeRadioButton.setSelected(true);
-			jLabel4.setText("Losungsdatei:");
+			jLabel4.setText("Lösungsdatei:");
 //			jLabel5.setEnabled(false);
 			jLabel5.setText("Aufgabendatei:");
 //			fileListFileField.setEnabled(false);
