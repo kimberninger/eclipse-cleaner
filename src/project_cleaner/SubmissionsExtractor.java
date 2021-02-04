@@ -412,12 +412,23 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		 */
 		checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder, faultyDir);
 		// Project is ready to import, make sure foldername doesn't exist already
-		if (Stream.of(outputDir.listFiles())
+		if(Stream.of(outputDir.listFiles())
 				.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
 			err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
-					+ submissionProjectFolder.getName() + "(1)");
+					+ submissionProjectFolder.getName() + "(" + 1 + ")");
+			int existCounter=1;
+			while (true) {
+				int curExistsC = existCounter;
+				if(!Stream.of(outputDir.listFiles())
+					.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()  + "(" + curExistsC + ")"))) {
+					break;
+				}
+				existCounter++;
+				err.println("Folder named " + submissionProjectFolder.getName() + "(" + (curExistsC - 1) + ")" + " already exists. renaming to: "
+						+ submissionProjectFolder.getName() + "(" + (existCounter) + ")");
+			}
 			File newProjectFolder = Paths
-					.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(1)").toFile();
+					.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(" + existCounter + ")").toFile();
 			if (!submissionProjectFolder.renameTo(newProjectFolder)) {
 				err.println("Could not rename, moving to faulty");
 				moveFolderContent(tempCurrentSubFolder, faultyDir);

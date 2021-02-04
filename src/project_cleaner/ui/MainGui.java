@@ -9,6 +9,7 @@ import static project_cleaner.LanguageMode.JAVA;
 import static project_cleaner.LanguageMode.RACKET;
 
 import java.awt.Color;
+import java.awt.FileDialog;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -782,6 +783,10 @@ public class MainGui extends javax.swing.JFrame {
 
 	private void solutionFileFieldChooserButtonActionPerformed(java.awt.event.ActionEvent evt) {
 		// TODO add your handling code here:
+//		FileDialog chooser = new FileDialog(this, lastDirectory == null ? solutionFileField.getText() : lastDirectory);
+//		chooser.setTitle("Wo liegt die Referenzlösung?");
+//		chooser.setFilenameFilter((dir, name) -> name.endsWith(".rkt"));
+//		chooser.show();
 		JFileChooser chooser = new JFileChooser(lastDirectory == null ? solutionFileField.getText() : lastDirectory);
 		chooser.setDialogTitle("Wo liegt die Referenzlösung?");
 		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
