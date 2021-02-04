@@ -414,9 +414,9 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		// Project is ready to import, make sure foldername doesn't exist already
 		if(Stream.of(outputDir.listFiles())
 				.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
-			err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
-					+ submissionProjectFolder.getName() + "(" + 1 + ")");
 			int existCounter=1;
+			err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
+					+ submissionProjectFolder.getName() + "(" + existCounter + ")");
 			while (true) {
 				int curExistsC = existCounter;
 				if(!Stream.of(outputDir.listFiles())
