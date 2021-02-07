@@ -89,8 +89,11 @@ public final class FileUtils {
 	 * @param targetDir the destination folder
 	 */
 	public static void copyFolderContent(File parentDir, File targetDir) {
-		if (!parentDir.isDirectory() || !targetDir.isDirectory()) {
+		if (!parentDir.isDirectory()) {
 			throw new IllegalArgumentException("parentDir must be a directory");
+		}
+		if(!targetDir.isDirectory()) {
+			throw new IllegalArgumentException("targetDir must be a directory");
 		}
 		for (File file : parentDir.listFiles()) {
 			if (file.isDirectory()) {

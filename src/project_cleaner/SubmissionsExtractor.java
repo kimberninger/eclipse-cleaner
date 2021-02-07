@@ -235,7 +235,8 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 						}
 
 					} catch (Exception e) {
-						err.print(e.getMessage());
+						err.print("Exception durung Java JSON Reading.");
+						e.printStackTrace();
 						// e.printStackTrace();
 						fileList = null;
 					}
@@ -269,7 +270,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 						}
 
 					} catch (Exception e) {
-						err.print(e.getMessage());
+						err.print("Exception durung Racket JSON Reading:" + e.getMessage());
 						// e.printStackTrace();
 						fileList = null;
 					}
@@ -692,13 +693,13 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 
 			}
 			JavaActionSetModel javaInstructionSet = (JavaActionSetModel) instructionSet;
-			if (instructionSet != null && !javaInstructionSet.getAssert_exists().isEmpty()) {
+			if (instructionSet != null) {
 				mergeProjectContent(solutionFolder, submissionProjectFolder, javaInstructionSet.getAssert_exists(),
 						javaInstructionSet.getAssert_not_exists(), javaInstructionSet.getOverwrite_always(),
 						javaInstructionSet.getCopy_if_not_exists(), javaInstructionSet.getIgnore());
 			}
 		} catch (Exception e) {
-			err.println(e.getMessage());
+			e.printStackTrace();
 		}
 		return true;
 	}
@@ -749,10 +750,13 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			if (file.isDirectory()) {
 				// Copy_if_not_exists and overwrite_always mode for directories
 				if (overwrite.contains(file.toPath().toAbsolutePath())) {
+					File copyTargetDir = Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile();
 					if (assertedNotExistsTriggered) {
 						err.println("Overwriting file that should not have existed:" + file.getName());
+					} else {
+						copyTargetDir.mkdirs();
 					}
-					copyFolderContent(file, Paths.get(targetDir.getAbsolutePath(), file.getName()).toFile());
+					copyFolderContent(file, copyTargetDir);
 					continue;
 				}
 				if (assertedExistsTriggered) {
