@@ -1,31 +1,113 @@
-# macOS folder descriptor
-.DS_Store
+### Intellij ###
+.idea/
+*.iws
+*.iml
+.idea_modules/
+atlassian-ide-plugin.xml
 
-# Compiled class file
-*.class
+### Eclipse ###
+.metadata
 bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.externalToolBuilders/
+*.launch
+.factorypath
+.recommenders/
+.apt_generated/
+.project
+.classpath
+
+### Linux ###
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+### NetBeans ###
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+### Gradle ###
+.gradle
 build/
-.vscode/
+
 # Log file
 *.log
+out/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
 
-# BlueJ files
-*.ctxt
+.git/
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
+# compiled output
+out-tsc/
+# Only exists if Bazel was run
+bazel-out/
 
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
+# dependencies
+node_modules/
 
-# but still allow libaries to commit
-!lib/*
+# profiling files
+chrome-profiler-events*.json
+speed-measure-plugin*.json
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
+# IDEs and editors
+.c9/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+.vs/
+
+# misc
+.sass-cache
+connect.lock
+coverage
+typings
