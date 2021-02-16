@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "fop"
-version = "2.2.0-SNAPSHOT"
+version = "2.2.1-Snapshot"
 
 repositories {
   mavenCentral()
