@@ -411,7 +411,10 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		 * submissionProjectFolder.getName()); moveFolderContent(submission, faultyDir);
 		 * continue; }
 		 */
-		checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder, faultyDir);
+		if(!checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder, faultyDir)){
+			moveFolderContent(submission, faultyDir);
+			return false;
+		}
 		// Project is ready to import, make sure foldername doesn't exist already
 		if(Stream.of(outputDir.listFiles())
 				.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
@@ -644,6 +647,10 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private boolean checkJavaNamingConvention(File extractedSubmissionFileOrFolder, File submissionProjectFolder,
 			String submittorName, File solutionFolder, File faultyDir) {
 		// Final Naming Convention Check and compatibility check
+		if(Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals("pom.xml"))){
+			err.println("Abgabe verwendet Maven-Version. Da niemand motiviert war Maven zu implementieren wird die Abgabe ins \"faulty\"-Verzeichnis verschoben.");
+			return false;
+		}
 		boolean hadProjectFile = true;
 		if (!Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals(".project"))) {
 			err.println("keine .project Datei bei " + submittorName);
@@ -672,7 +679,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			documentBuilder = documentBuilderFactory.newDocumentBuilder();
 			document = documentBuilder.parse(projectFile);
 			var projectName = document.getElementsByTagName("name").item(0);
-			if (!projectName.getTextContent()
+			if (!projectName.getTextContent().trim()
 					.matches("H[0-9]+_(?!(?i)NACHNAME_VORNAME(?-i))[a-zA-Z\\-]+(_[a-zA-Z\\-]+)+")) {
 				if (hadProjectFile) {
 					err.println("Namenskonvention verletzt bei " + submittorName + ": " + projectName.getTextContent());
