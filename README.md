@@ -41,9 +41,9 @@ Standartmodus Dateiliste: `assert_exists`
 Standartmodus für Dateien die nicht in der Liste Sind: `copy_if_not_exists`
 ## Selber Kompillieren
 Falls die Fertige JAR-Datei nicht funktioniert, oder mann selbst die neuste Version kompillieren will geht das recht einfach:
-- Das Github repo mit eclipse Clonen und das Projekt importieren
-- Rechtsklick auf Projekt->Properties-> Resource->Text file encoding -> UTF-8 Wählen (falls nicht vorausgewählt)
-- Die Run Configuration von MainGui oder ProjectCleaner nutzen (machen aktuell fast das gleiche)
+- Das Github repo in beliebigen Ordner Clonen
+- Den Ordner mit einem Gradle-Fähigen IDE öffnen (In Eclipse unter Import -> Gradle Project)
+- Die Run Configuration von MainGui oder ProjectCleaner  nutzen (kein Racket support ohne gui)
 ## Bekannte Fehler
 - Einige Optionen des JavaActionSetModels werden noch nicht berücksichtigt
 - Racket Modus noch buggy
@@ -53,10 +53,17 @@ Falls die Fertige JAR-Datei nicht funktioniert, oder mann selbst die neuste Vers
 - Bessere Logs/Ausgaben (ggf als HTML)
 
 ## Mitwirkende
-- Kim Berninger (Ersteller)
-    - Base Structure
-    - Gui
-    - Command Line Mode
-- Ruben Deisenroth
-  - File Extractor
+- [Kim Berninger](https://github.com/kimberninger) (Ersteller)
+  - Base Structure
+  - Old (legacy) Gui
+  - Command Line Mode
+- [Ruben Deisenroth](https://github.com/Rdeisenroth)
+  - Java Mode
+  - Racket Mode
+  - New GUI
+  - Everything that has to do with Files ([File-Utils](src/main/java/fop/project_cleaner/FileUtils.java), [SubmissionExtractor](src/main/java/fop/project_cleaner/SubmissionsExtractor.java), [RacoAdapter](src/main/java/fop/project_cleaner/RacoAdapter.java), ...)
+  - Responsive gui during extraction
   - Quality of Life improvements
+- [Alexander Staeding](https://github.com/alexstaeding)
+  - Gradle
+  - Versioning improvements
