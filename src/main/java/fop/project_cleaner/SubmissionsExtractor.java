@@ -403,6 +403,36 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 				System.out.println("Cannot remove" + " __MACOSX-Folder");
 			}
 		}
+		if (tempCurrentSubFolder.listFiles().length != 1) {
+			if (Stream.of(tempCurrentSubFolder.listFiles())
+					.anyMatch(x -> x.getName().equals(".project") || x.getName().equals("pom.xml"))) {
+				System.err.println("Warning: Submission of " + submittorName + " is not in a Subfolder. Creating one");
+				JavaActionSetModel javaInstructionSet = (JavaActionSetModel) instructionSet;
+				// Get correct project name
+				String newProjectName = submittorName.replace(" ", "_").replace("ä", "ae").replace("ö", "oe")
+						.replace("ü", "ue").replace("ß", "ss");
+				String hausuebungsprefix = String.format("H%02d_", javaInstructionSet.getSheet_number());
+				String folder_Name = hausuebungsprefix + newProjectName;
+				File newdir = FileUtils.ensureDirectories(tempCurrentSubFolder, folder_Name).get(0);
+				// Move everything except for new dir
+				for (File file : tempCurrentSubFolder.listFiles()) {
+					if (file.equals(newdir)) {
+						continue;
+					}
+					if (file.isDirectory()) {
+						moveFolderContent(file, ensureDirectories(newdir, file.getName()).get(0));
+						file.delete();
+					} else {
+						try {
+							Files.move(file.toPath(), Paths.get(newdir.getAbsolutePath(), file.getName()),
+									StandardCopyOption.REPLACE_EXISTING);
+						} catch (IOException e) {
+							System.err.println(e.getMessage());
+						}
+					}
+				}
+			}
+		}
 		File submissionProjectFolder = tempCurrentSubFolder.listFiles()[0];
 		/*
 		 * Unnecessary if (!submissionProjectFolder.getName().matches(
@@ -411,28 +441,30 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		 * submissionProjectFolder.getName()); moveFolderContent(submission, faultyDir);
 		 * continue; }
 		 */
-		if(!checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder, faultyDir)){
+		if (!checkJavaNamingConvention(submissionZip, submissionProjectFolder, submittorName, solutionFolder,
+				faultyDir)) {
 			moveFolderContent(submission, faultyDir);
 			return false;
 		}
 		// Project is ready to import, make sure foldername doesn't exist already
-		if(Stream.of(outputDir.listFiles())
+		if (Stream.of(outputDir.listFiles())
 				.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()))) {
-			int existCounter=1;
+			int existCounter = 1;
 			err.println("Folder named " + submissionProjectFolder.getName() + " already exists. renaming to: "
 					+ submissionProjectFolder.getName() + "(" + existCounter + ")");
 			while (true) {
 				int curExistsC = existCounter;
-				if(!Stream.of(outputDir.listFiles())
-					.anyMatch(x -> x.isDirectory() && x.getName().equals(submissionProjectFolder.getName()  + "(" + curExistsC + ")"))) {
+				if (!Stream.of(outputDir.listFiles()).anyMatch(x -> x.isDirectory()
+						&& x.getName().equals(submissionProjectFolder.getName() + "(" + curExistsC + ")"))) {
 					break;
 				}
 				existCounter++;
-				err.println("Folder named " + submissionProjectFolder.getName() + "(" + (curExistsC - 1) + ")" + " already exists. renaming to: "
-						+ submissionProjectFolder.getName() + "(" + (existCounter) + ")");
+				err.println("Folder named " + submissionProjectFolder.getName() + "(" + (curExistsC - 1) + ")"
+						+ " already exists. renaming to: " + submissionProjectFolder.getName() + "(" + (existCounter)
+						+ ")");
 			}
-			File newProjectFolder = Paths
-					.get(tempCurrentSubFolder.getAbsolutePath(), submissionProjectFolder.getName() + "(" + existCounter + ")").toFile();
+			File newProjectFolder = Paths.get(tempCurrentSubFolder.getAbsolutePath(),
+					submissionProjectFolder.getName() + "(" + existCounter + ")").toFile();
 			if (!submissionProjectFolder.renameTo(newProjectFolder)) {
 				err.println("Could not rename, moving to faulty");
 				moveFolderContent(tempCurrentSubFolder, faultyDir);
@@ -450,7 +482,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	 * @param faultyDir            the directory to move if faulty
 	 * @param tempCurrentSubFolder the folder to extraxt the current submission to
 	 *                             isolated
-	 * @param solutionFile       the solution file
+	 * @param solutionFile         the solution file
 	 * @return true if processed sucessfully
 	 */
 	private boolean processRacketSubmission(File submission, File faultyDir, File tempCurrentSubFolder,
@@ -513,7 +545,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 		}
 		if (racketInstructionSet.isDo_tests()) {
 			String codeWithoutTestsAndComments = RacoAdapter.removeTests(submissionContentWithoutComments);
-			if(codeWithoutTestsAndComments == null) {
+			if (codeWithoutTestsAndComments == null) {
 				moveFolderContent(submission, faultyDir);
 				return false;
 			}
@@ -527,7 +559,7 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 			int testCount = 0;
 			var tasks = racketInstructionSet.getTasks();
 			ArrayList<RacketTest> tests = new ArrayList<>();
-			for(var task : tasks) {
+			for (var task : tasks) {
 				tests.addAll(task.getTests());
 			}
 			System.out.print("❯  running Tests...");
@@ -548,8 +580,9 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 //						System.out.println("❯  running \"" + test.getTitle() + "\" " + test.getRepeat() + " time(s)");
 //
 //					}
-					RacketTestResult result = results.stream().filter(x -> x.getTest().equals(test)).findFirst().orElse(null);
-					if(result == null) {
+					RacketTestResult result = results.stream().filter(x -> x.getTest().equals(test)).findFirst()
+							.orElse(null);
+					if (result == null) {
 						System.err.println("Something went wrong with the quick testing method.");
 						continue;
 					}
@@ -647,8 +680,9 @@ public class SubmissionsExtractor extends SwingWorker<String, Object> {
 	private boolean checkJavaNamingConvention(File extractedSubmissionFileOrFolder, File submissionProjectFolder,
 			String submittorName, File solutionFolder, File faultyDir) {
 		// Final Naming Convention Check and compatibility check
-		if(Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals("pom.xml"))){
-			err.println("Abgabe verwendet Maven-Version. Da niemand motiviert war Maven zu implementieren wird die Abgabe ins \"faulty\"-Verzeichnis verschoben.");
+		if (Arrays.stream(submissionProjectFolder.listFiles()).anyMatch(x -> x.getName().equals("pom.xml"))) {
+			err.println(
+					"Abgabe verwendet Maven-Version. Da niemand motiviert war Maven zu implementieren wird die Abgabe ins \"faulty\"-Verzeichnis verschoben.");
 			return false;
 		}
 		boolean hadProjectFile = true;
